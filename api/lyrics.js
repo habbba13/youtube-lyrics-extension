@@ -5,7 +5,7 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: "Missing song title" });
     }
 
-    const apiKey = "YOUR_GENIUS_API_KEY"; // Replace this with your Genius API key
+    const apiKey = "9pHpHyX2c4Bq-nBYSOIXM2Gzr9ANd0vcAOsCjfb7IQ5Wk3NjTcrUZOvHHAcDtH1d"; // Replace this with your Genius API key
     const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(title)}`;
 
     try {
