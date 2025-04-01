@@ -1,0 +1,8 @@
+{
+  "name": "youtube-lyrics-extension",
+  "version": "1.0.0",
+  "main": "index.js",  // Replace with your entry point if different
+  "dependencies": {
+    "node-fetch": "^2.6.7"
+  }
+}
