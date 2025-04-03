@@ -19,7 +19,7 @@ module.exports = async (req, res) => {
             return res.status(400).json({ error: "Missing title parameter" });
         }
 
-        const apiKey = "9pHpHyX2c4Bq-nBYSOIXM2Gzr9ANd0vcAOsCjfb7IQ5Wk3NjTcrUZOvHHAcDtH1d"; // Replace with your Genius API key
+        const apiKey = process.env.GENIUS_ACCESS_TOKEN;  // Replace with your Genius API key
         const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(title)}`;
 
         console.log("Fetching lyrics from Genius API...");
