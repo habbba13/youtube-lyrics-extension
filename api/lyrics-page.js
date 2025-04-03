@@ -6,6 +6,7 @@ module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
 
   const { url } = req.query;
+  console.log('[Scraping]', url);
 
   if (!url) {
     return res.status(400).json({ error: 'Missing Genius URL' });
@@ -42,6 +43,7 @@ module.exports = async (req, res) => {
     }
 
     if (!lyrics) {
+      console.warn('[No Lyrics Found]');
       return res.status(404).json({ error: 'Lyrics not found on page' });
     }
 
