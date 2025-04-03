@@ -1,3 +1,4 @@
+
 const fetch = require('node-fetch');
 
 module.exports = async (req, res) => {
@@ -23,19 +24,20 @@ module.exports = async (req, res) => {
       return res.status(404).json({ error: 'No results found on Genius' });
     }
 
-    // Smart filtering
+    // Prioritize real songs only
     const normalizedTitle = title.toLowerCase();
     const bestMatch = hits.find(hit => {
       const fullTitle = hit.result.full_title.toLowerCase();
       const pagePath = hit.result.path.toLowerCase();
       return (
+        hit.result.type === 'song' &&
         fullTitle.includes(normalizedTitle.split("-")[0].trim()) &&
         !pagePath.includes("translation") &&
         !pagePath.includes("news") &&
         !pagePath.includes("bio") &&
         !pagePath.includes("tracklist")
       );
-    }) || hits[0]; // fallback
+    }) || hits.find(hit => hit.result.type === 'song') || hits[0];
 
     const lyricsUrl = bestMatch.result.url;
     res.status(200).json({ lyricsUrl });
