@@ -21,11 +21,16 @@ module.exports = async (req, res) => {
     const lyricsContainers = $('[data-lyrics-container]');
 
     let lyrics = lyricsContainers
-      .find('span')
       .map((_, el) => $(el).text().trim())
       .get()
-      .filter(line => line && !/contributors|translations/i.test(line)) // 🧽 filter junk
       .join('\n\n');
+
+    // Optional cleanup
+    lyrics = lyrics
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line && !/contributors|translations/i.test(line))
+      .join('\n');
 
     // Fallback for older layout
     if (!lyrics) {
