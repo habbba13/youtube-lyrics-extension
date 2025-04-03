@@ -44,7 +44,20 @@ module.exports = async (req, res) => {
       return res.status(404).json({ error: 'Lyrics URL not found.' });
     }
 
-    // Step 3: Scrape the lyrics page to extract lyrics
+    // Step 3: Use the Web Pages API to check if the page is annotatable
+    const webPageUrl = `https://api.genius.com/web_pages/lookup?raw_annotatable_url=${encodeURIComponent(lyricsUrl)}`;
+    const webPageResponse = await fetchWithTimeout(webPageUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    const webPageData = await webPageResponse.json();
+    if (!webPageData.response || !webPageData.response.web_page) {
+      return res.status(404).json({ error: 'Web page not found or not annotatable on Genius.' });
+    }
+
+    console.log('Web page data:', webPageData.response.web_page);
+
+    // Step 4: Scrape the lyrics page to extract lyrics
     const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(lyricsUrl)}`;
     const lyricsPageResponse = await fetchWithTimeout(proxyUrl);
     const lyricsPageData = await lyricsPageResponse.json();
