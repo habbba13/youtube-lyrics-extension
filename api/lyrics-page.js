@@ -1,7 +1,7 @@
-import fetch from 'node-fetch';
-import * as cheerio from 'cheerio';
+const fetch = require('node-fetch');
+const cheerio = require('cheerio');
 
-export default async function handler(req, res) {
+module.exports = async (req, res) => {
   const { url } = req.query;
 
   if (!url) {
@@ -13,7 +13,7 @@ export default async function handler(req, res) {
     const html = await response.text();
     const $ = cheerio.load(html);
 
-    // Genius uses data-lyrics-container spans now
+    // Genius now uses spans with data-lyrics-container
     const lyricsElements = $('[data-lyrics-container]');
     const lyrics = lyricsElements
       .map((_, el) => $(el).text())
@@ -29,4 +29,4 @@ export default async function handler(req, res) {
     console.error('Failed to scrape lyrics:', err);
     res.status(500).json({ error: 'Failed to fetch or parse lyrics' });
   }
-}
+};
