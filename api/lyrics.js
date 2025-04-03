@@ -1,4 +1,6 @@
 export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*"); // ✅ THIS LINE
+
   const { title } = req.query;
 
   if (!title) {
