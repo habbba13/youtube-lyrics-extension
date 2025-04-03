@@ -4,8 +4,8 @@ const AbortController = require('abort-controller');
 let cache = {}; // Simple in-memory cache for lyrics
 
 module.exports = async (req, res) => {
-  const { title } = req.query;
-  const accessToken = process.env.GENIUS_ACCESS_TOKEN;
+  const { title } = req.query; // Get the song title from the query params
+  const accessToken = process.env.GENIUS_ACCESS_TOKEN; // Your Genius API access token
 
   if (!title) {
     return res.status(400).json({ error: 'Song title is required.' });
@@ -32,7 +32,7 @@ module.exports = async (req, res) => {
       return res.status(404).json({ error: 'Song not found on Genius.' });
     }
 
-    // Step 2: Fetch song details using the song ID
+    // Step 2: Fetch song details using the song ID to get the lyrics URL
     const songUrl = `https://api.genius.com/songs/${song.id}`;
     const songResponse = await fetchWithTimeout(songUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -63,7 +63,7 @@ module.exports = async (req, res) => {
       console.warn('No annotations found on this page. Proceeding with lyrics extraction.');
     }
 
-    // Step 4: Scrape the lyrics page to extract lyrics
+    // Step 4: Scrape the lyrics page to extract lyrics using a proxy service (AllOrigins)
     const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(lyricsUrl)}`;
     const lyricsPageResponse = await fetchWithTimeout(proxyUrl);
     const lyricsPageData = await lyricsPageResponse.json();
@@ -75,6 +75,8 @@ module.exports = async (req, res) => {
 
     // Cache the lyrics for future requests
     cache[title] = lyrics;
+
+    // Return the lyrics as the response
     res.status(200).json({ lyrics });
   } catch (error) {
     console.error('Error fetching lyrics:', error);
@@ -89,9 +91,9 @@ function extractLyrics(html) {
   let match;
 
   while ((match = regex.exec(html)) !== null) {
-    lyrics += match[1].replace(/<br\s*\/?>(?<!<a)/g, '\n')
-                      .replace(/<.*?>/g, '')
-                      .trim() + '\n\n';
+    lyrics += match[1].replace(/<br\s*\/?>(?<!<a)/g, '\n')  // Replace <br> tags with newlines
+                      .replace(/<.*?>/g, '')             // Remove HTML tags
+                      .trim() + '\n\n';                 // Add newlines between lyrics
   }
 
   return lyrics.trim();
