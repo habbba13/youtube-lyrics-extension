@@ -5,7 +5,7 @@ export default async function handler(req, res) {
   const { url } = req.query;
 
   if (!url) {
-    return res.status(400).json({ error: 'Missing URL parameter' });
+    return res.status(400).json({ error: 'Missing Genius URL' });
   }
 
   try {
@@ -13,7 +13,7 @@ export default async function handler(req, res) {
     const html = await response.text();
     const $ = cheerio.load(html);
 
-    // Genius now uses data-lyrics-container spans
+    // Genius uses data-lyrics-container spans now
     const lyricsElements = $('[data-lyrics-container]');
     const lyrics = lyricsElements
       .map((_, el) => $(el).text())
@@ -25,8 +25,8 @@ export default async function handler(req, res) {
     }
 
     res.status(200).json({ lyrics });
-  } catch (error) {
-    console.error('Error fetching lyrics page:', error);
+  } catch (err) {
+    console.error('Failed to scrape lyrics:', err);
     res.status(500).json({ error: 'Failed to fetch or parse lyrics' });
   }
 }
