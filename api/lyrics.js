@@ -27,13 +27,21 @@ module.exports = async (req, res) => {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     const searchData = await searchResponse.json();
-    console.log("Search Data: ", searchData); // Log the search response
-    const song = searchData.response.hits[0]?.result;
-    console.log('Hits:', searchData.response.hits);  // Log all search hits for clarity
 
+    // Log all search hits for better inspection
+    console.log("All Search Hits:", searchData.response.hits);
+
+    const song = searchData.response.hits.find(hit => {
+    // Match the song based on title and artist (you can refine this logic further)
+    return hit.result.title.toLowerCase() === title.toLowerCase();
+  });
+    
     if (!song) {
       return res.status(404).json({ error: 'Song not found on Genius.' });
     }
+
+    console.log("Matched Song:", song); // Log the matched song for verification
+    // Proceed with fetching song details as usual...
 
     // Step 2: Fetch song details using the song ID
     const songUrl = `https://api.genius.com/songs/${song.id}`;
