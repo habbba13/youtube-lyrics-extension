@@ -24,20 +24,22 @@ module.exports = async (req, res) => {
       return res.status(404).json({ error: 'No results found on Genius' });
     }
 
-    // Prioritize real songs only
     const normalizedTitle = title.toLowerCase();
-    const bestMatch = hits.find(hit => {
+    const filteredHits = hits.filter(hit => {
       const fullTitle = hit.result.full_title.toLowerCase();
       const pagePath = hit.result.path.toLowerCase();
       return (
         hit.result.type === 'song' &&
-        fullTitle.includes(normalizedTitle.split("-")[0].trim()) &&
         !pagePath.includes("translation") &&
+        !pagePath.includes("traducao") &&
         !pagePath.includes("news") &&
         !pagePath.includes("bio") &&
-        !pagePath.includes("tracklist")
+        !pagePath.includes("tracklist") &&
+        fullTitle.includes(normalizedTitle.split("-")[0].trim())
       );
-    }) || hits.find(hit => hit.result.type === 'song') || hits[0];
+    });
+
+    const bestMatch = filteredHits[0] || hits.find(hit => hit.result.type === 'song') || hits[0];
 
     const lyricsUrl = bestMatch.result.url;
     res.status(200).json({ lyricsUrl });
