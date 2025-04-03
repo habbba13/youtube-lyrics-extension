@@ -11,7 +11,7 @@ module.exports = async (req, res) => {
   }
 
   const apiKey = process.env.SCRAPER_API_KEY;
-  const scraperUrl = `http://api.scraperapi.com?api_key=${apiKey}&url=${encodeURIComponent(url)}`;
+  const scraperUrl = `http://api.scraperapi.com?api_key=${apiKey}&url=${encodeURIComponent(url)}&render=false&autoparse=false&cache=false`;
 
   try {
     const response = await fetch(scraperUrl);
@@ -19,7 +19,6 @@ module.exports = async (req, res) => {
     const $ = cheerio.load(html);
 
     const lyricsContainers = $('[data-lyrics-container]');
-
     let lyrics = lyricsContainers
       .map((_, el) => {
         return $(el)
@@ -37,7 +36,6 @@ module.exports = async (req, res) => {
       .filter(line => line && !/contributors|translations|avatars|lyrics/i.test(line))
       .join('\n');
 
-    // Fallback for older layout
     if (!lyrics) {
       lyrics = $('.lyrics').text().trim();
     }
