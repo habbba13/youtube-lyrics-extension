@@ -19,6 +19,8 @@ module.exports = async (req, res) => {
     });
     const searchData = await searchResponse.json();
     const hits = searchData?.response?.hits || [];
+    console.log('[Genius Hits]', hits.map(h => h.result.full_title));
+    console.log('[Using Title]', title);
 
     if (hits.length === 0) {
       return res.status(404).json({ error: 'No results found on Genius' });
@@ -45,6 +47,7 @@ module.exports = async (req, res) => {
       );
     }) || hits.find(hit => hit.result.type === 'song') || hits[0];
 
+    console.log('[Chosen URL]', bestHit.result.url);
     const songId = bestHit.result.id;
 
     // Step 3: Fetch full song data via Genius API
