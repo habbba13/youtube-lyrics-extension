@@ -27,7 +27,9 @@ module.exports = async (req, res) => {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     const searchData = await searchResponse.json();
+    console.log("Search Data: ", searchData); // Log the search response
     const song = searchData.response.hits[0]?.result;
+    console.log('Hits:', searchData.response.hits);  // Log all search hits for clarity
 
     if (!song) {
       return res.status(404).json({ error: 'Song not found on Genius.' });
@@ -40,6 +42,8 @@ module.exports = async (req, res) => {
     });
     const songData = await songResponse.json();
     const lyricsUrl = songData.response.song.url;
+
+    console.log('Lyrics URL:', lyricsUrl); // Log the URL to check if it's valid
 
     if (!lyricsUrl) {
       return res.status(404).json({ error: 'Lyrics URL not found.' });
