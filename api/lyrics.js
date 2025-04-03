@@ -6,7 +6,6 @@ module.exports = async (req, res) => {
   const { title } = req.query;
   const accessToken = process.env.GENIUS_ACCESS_TOKEN;
 
-  // Ensure title and access token are provided
   if (!title) {
     return res.status(400).json({ error: 'Song title is required.' });
   }
@@ -14,23 +13,20 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: 'Genius API access token is missing.' });
   }
 
-  // Check if the lyrics are already cached
   if (cache[title]) {
     console.log("Returning cached lyrics for:", title);
     return res.status(200).json({ lyrics: cache[title] });
   }
 
   try {
-    // Step 1: Search for the song on Genius
+    // Search for the song
     const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(title)}`;
     const searchResponse = await fetch(searchUrl, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     if (!searchResponse.ok) {
-      throw new Error(`Genius API search responded with status: ${searchResponse.status}`);
+      return res.status(searchResponse.status).json({ error: 'Error fetching song search results.' });
     }
 
     const searchData = await searchResponse.json();
@@ -40,47 +36,52 @@ module.exports = async (req, res) => {
       return res.status(404).json({ error: 'Song not found on Genius.' });
     }
 
-    // Step 2: Fetch the song details to get the lyrics path
+    // Fetch song details
     const songUrl = `https://api.genius.com/songs/${song.id}`;
     const songResponse = await fetch(songUrl, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     if (!songResponse.ok) {
-      throw new Error(`Genius API song details responded with status: ${songResponse.status}`);
+      return res.status(songResponse.status).json({ error: 'Error fetching song details.' });
     }
 
     const songData = await songResponse.json();
     const lyricsPath = songData.response.song.path;
 
-    // Step 3: Scrape the lyrics using a proxy to avoid CORS issues
+    if (!lyricsPath) {
+      return res.status(404).json({ error: 'Lyrics path not found on Genius.' });
+    }
+
+    // Fetch lyrics using a proxy to bypass CORS
     const lyricsPageUrl = `https://genius.com${lyricsPath}`;
     const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(lyricsPageUrl)}`;
 
     const lyricsPageResponse = await fetch(proxyUrl);
 
     if (!lyricsPageResponse.ok) {
-      throw new Error(`Failed to fetch lyrics page with status: ${lyricsPageResponse.status}`);
+      return res.status(lyricsPageResponse.status).json({ error: 'Error fetching lyrics page.' });
     }
 
-    const lyricsPageHtml = await lyricsPageResponse.text();
-    const lyrics = extractLyrics(lyricsPageHtml);
+    const lyricsPageData = await lyricsPageResponse.json();
+    if (!lyricsPageData.contents) {
+      return res.status(500).json({ error: 'Failed to retrieve lyrics page content.' });
+    }
+
+    const lyrics = extractLyrics(lyricsPageData.contents);
 
     if (!lyrics) {
       return res.status(404).json({ error: 'Lyrics not found on Genius.' });
     }
 
-    // Cache the lyrics for future requests
+    // Cache lyrics to reduce API calls
     cache[title] = lyrics;
 
-    // Return the lyrics as the response
     res.status(200).json({ lyrics });
 
   } catch (error) {
     console.error('Error fetching lyrics:', error);
-    res.status(500).json({ error: 'Failed to fetch lyrics.' });
+    res.status(500).json({ error: 'Internal server error.' });
   }
 };
 
@@ -97,5 +98,5 @@ function extractLyrics(html) {
       .trim() + '\n\n';
   }
 
-  return lyrics.trim();
+  return lyrics.trim() || null;
 }
