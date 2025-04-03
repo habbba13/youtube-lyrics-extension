@@ -23,8 +23,8 @@ module.exports = async (req, res) => {
         const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(title)}`;
 
         console.log("Fetching lyrics from Genius API...");
-        const response = await fetch(searchUrl, {
-            headers: { Authorization: `Bearer ${apiKey}` }
+        const response = await fetch(`https://api.genius.com/search?q=${encodeURIComponent(title)}`, {
+            headers: { Authorization: `9pHpHyX2c4Bq-nBYSOIXM2Gzr9ANd0vcAOsCjfb7IQ5Wk3NjTcrUZOvHHAcDtH1d` }
         });
 
         console.log("Genius API Response Status:", response.status);
