@@ -1,3 +1,4 @@
+
 const fetch = require('node-fetch');
 const cheerio = require('cheerio');
 
@@ -17,19 +18,23 @@ module.exports = async (req, res) => {
     const html = await response.text();
     const $ = cheerio.load(html);
 
-    // First try new Genius layout
     const lyricsContainers = $('[data-lyrics-container]');
 
     let lyrics = lyricsContainers
-      .map((_, el) => $(el).text().trim())
+      .map((_, el) => {
+        return $(el)
+          .contents()
+          .map((_, child) => $(child).text())
+          .get()
+          .join('\n');
+      })
       .get()
-      .join('\n\n');
+      .join('\n');
 
-    // Optional cleanup
     lyrics = lyrics
       .split('\n')
       .map(line => line.trim())
-      .filter(line => line && !/contributors|translations/i.test(line))
+      .filter(line => line && !/contributors|translations|avatars|lyrics/i.test(line))
       .join('\n');
 
     // Fallback for older layout
