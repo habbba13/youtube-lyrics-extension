@@ -2,14 +2,14 @@ const fetch = require('node-fetch');
 
 module.exports = async (req, res) => {
   const { title } = req.query;
-  const accessToken = process.env.GENIUS_ACCESS_TOKEN;  // Get the Genius Access Token
+  const accessToken = process.env.GENIUS_ACCESS_TOKEN;
 
-  // Ensure title and access token are provided
-  if (!title) {
-    return res.status(400).json({ error: 'Song title is required.' });
-  }
   if (!accessToken) {
     return res.status(500).json({ error: 'Genius API access token is missing.' });
+  }
+
+  if (!title) {
+    return res.status(400).json({ error: 'Song title is required.' });
   }
 
   try {
@@ -32,57 +32,12 @@ module.exports = async (req, res) => {
       return res.status(404).json({ error: 'Song not found on Genius.' });
     }
 
-    // Step 2: Fetch the song details to get the lyrics path
-    const songUrl = `https://api.genius.com/songs/${song.id}`;
-    const songResponse = await fetch(songUrl, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
-
-    if (!songResponse.ok) {
-      throw new Error(`Genius API song details responded with status: ${songResponse.status}`);
-    }
-
-    const songData = await songResponse.json();
-    const lyricsPath = songData.response.song.path;
-
-    // Step 3: Scrape the lyrics from the Genius song page
-    const lyricsPageUrl = `https://genius.com${lyricsPath}`;
-    const lyricsPageResponse = await fetch(lyricsPageUrl);
-
-    if (!lyricsPageResponse.ok) {
-      throw new Error(`Failed to fetch lyrics page with status: ${lyricsPageResponse.status}`);
-    }
-
-    const lyricsPageHtml = await lyricsPageResponse.text();
-    const lyrics = extractLyrics(lyricsPageHtml);
-
-    if (!lyrics) {
-      return res.status(404).json({ error: 'Lyrics not found on Genius.' });
-    }
-
-    // Return the lyrics as the response
-    res.status(200).json({ lyrics });
-
+    // Step 2: Get the song's Genius URL
+    const lyricsPageUrl = song.url;
+    
+    res.status(200).json({ lyricsUrl: lyricsPageUrl });
   } catch (error) {
     console.error('Error fetching lyrics:', error);
     res.status(500).json({ error: 'Failed to fetch lyrics.' });
   }
 };
-
-// Helper function to extract lyrics from the Genius song page HTML
-function extractLyrics(html) {
-  const regex = /<div class="Lyrics__Container.*?>(.*?)<\/div>/gs;
-  let lyrics = '';
-  let match;
-
-  while ((match = regex.exec(html)) !== null) {
-    lyrics += match[1]
-      .replace(/<br\s*\/?>/g, '\n')
-      .replace(/<.*?>/g, '')
-      .trim() + '\n\n';
-  }
-
-  return lyrics.trim();
-}
