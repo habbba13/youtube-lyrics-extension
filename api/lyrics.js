@@ -26,18 +26,18 @@ module.exports = async (req, res) => {
 
     const normalize = str =>
       str.toLowerCase()
-        .replace(/[^a-z0-9 ]/gi, '')
-        .replace(/\s{2,}/g, ' ')
-        .trim();
+        .replace(/[^a-z0-9]/gi, '-')     // Match Genius-style slug format
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
 
-    const searchNormalized = normalize(title);
+    const expectedSlug = normalize(title); // e.g., "lil-yachty-and-veeze-sorry-not-sorry"
 
     const bestMatch = hits.find(hit => {
-      const fullTitle = normalize(hit.result.full_title);
+      const urlSlug = hit.result.url.toLowerCase();
       const pagePath = hit.result.path.toLowerCase();
       return (
         hit.result.type === 'song' &&
-        fullTitle.includes(searchNormalized) &&
+        urlSlug.includes(expectedSlug) &&
         !pagePath.includes('translation') &&
         !pagePath.includes('traducao') &&
         !pagePath.includes('news') &&
