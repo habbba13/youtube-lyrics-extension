@@ -1,14 +1,13 @@
 const fetch = require('node-fetch');
 const AbortController = require('abort-controller');
-const { JSDOM } = require('jsdom'); // We use jsdom to parse the HTML and extract lyrics
+const { JSDOM } = require('jsdom');
 
-let cache = {}; // Simple in-memory cache for lyrics
+let cache = {}; // In-memory cache
 
 module.exports = async (req, res) => {
   const { title } = req.query;
   const accessToken = process.env.GENIUS_ACCESS_TOKEN;
 
-  // Validate input
   if (!title) {
     return res.status(400).json({ error: 'Song title is required.' });
   }
@@ -16,7 +15,6 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: 'Genius API access token is missing.' });
   }
 
-  // Check cache for lyrics
   if (cache[title]) {
     console.log("Returning cached lyrics for:", title);
     return res.status(200).json({ lyrics: cache[title] });
@@ -30,50 +28,59 @@ module.exports = async (req, res) => {
     });
     const searchData = await searchResponse.json();
 
-    // Log all search hits for better inspection
     console.log("All Search Hits:", searchData.response.hits);
 
-    // Select the song from the search results (based on title)
-    const song = searchData.response.hits.find(hit => {
-      return hit.result.title.toLowerCase() === title.toLowerCase();
-    });
+    // Find the best matching song
+    const song = searchData.response.hits.length > 0 ? searchData.response.hits[0].result : null;
     
     if (!song) {
       return res.status(404).json({ error: 'Song not found on Genius.' });
     }
 
-    console.log("Matched Song:", song); // Log the matched song for verification
+    console.log("Matched Song:", song.full_title);
 
     // Step 2: Fetch song details using the song ID
-    const songUrl = `https://api.genius.com/songs/${song.result.id}`;
+    const songUrl = `https://api.genius.com/songs/${song.id}`;
     const songResponse = await fetchWithTimeout(songUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     const songData = await songResponse.json();
     const lyricsUrl = songData.response.song.url;
 
-    console.log('Lyrics URL:', lyricsUrl); // Log the URL to check if it's valid
+    console.log('Lyrics URL:', lyricsUrl);
 
     if (!lyricsUrl) {
       return res.status(404).json({ error: 'Lyrics URL not found.' });
     }
 
-    // Step 3: Scrape the lyrics from the Genius page using JSDOM
+    // Step 3: Try fetching lyrics using Web Pages API (safer alternative)
+    const webPageUrl = `https://api.genius.com/web_pages/lookup?raw_annotatable_url=${encodeURIComponent(lyricsUrl)}`;
+    const webPageResponse = await fetchWithTimeout(webPageUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    const webPageData = await webPageResponse.json();
+    
+    if (!webPageData.response.web_page) {
+      console.warn('Web page data not found, attempting direct lyrics extraction...');
+    }
+
+    // Step 4: Attempt to scrape lyrics (Warning: Might not work due to Cloudflare)
     const lyricsPageResponse = await fetchWithTimeout(lyricsUrl);
     const lyricsPageHtml = await lyricsPageResponse.text();
 
-    // Use JSDOM to parse the HTML and extract the lyrics
     const dom = new JSDOM(lyricsPageHtml);
-    // Update selector to match the lyrics container (Genius uses different classes for lyrics)
-    const lyricsElement = dom.window.document.querySelector('.lyrics'); // Check if this works or change the selector
+    let lyrics = "";
 
-    const lyrics = lyricsElement ? lyricsElement.textContent : null;
+    // Genius uses multiple divs for lyrics, extract all
+    dom.window.document.querySelectorAll("div[class^='Lyrics__Container']").forEach(lyricDiv => {
+      lyrics += lyricDiv.textContent.trim() + "\n\n";
+    });
 
-    if (!lyrics) {
+    if (!lyrics.trim()) {
       return res.status(404).json({ error: 'Lyrics not found on Genius.' });
     }
 
-    // Cache the lyrics for future requests
     cache[title] = lyrics;
     res.status(200).json({ lyrics });
 
