@@ -9,16 +9,26 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/89.0.4389.82 Safari/537.36'
+      }
+    });
+
     const html = await response.text();
     const $ = cheerio.load(html);
 
-    // Genius now uses spans with data-lyrics-container
-    const lyricsElements = $('[data-lyrics-container]');
-    const lyrics = lyricsElements
+    // First: try new method
+    let lyrics = $('[data-lyrics-container]')
       .map((_, el) => $(el).text())
       .get()
       .join('\n\n');
+
+    // Fallback: try old method
+    if (!lyrics) {
+      lyrics = $('.lyrics').text().trim();
+    }
 
     if (!lyrics) {
       return res.status(404).json({ error: 'Lyrics not found on page' });
@@ -30,3 +40,4 @@ module.exports = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch or parse lyrics' });
   }
 };
+
