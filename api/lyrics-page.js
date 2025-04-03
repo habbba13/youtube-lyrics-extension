@@ -1,5 +1,4 @@
 const fetch = require('node-fetch');
-const cheerio = require('cheerio');
 
 module.exports = async (req, res) => {
   const { url } = req.query;
@@ -17,27 +16,12 @@ module.exports = async (req, res) => {
     });
 
     const html = await response.text();
-    const $ = cheerio.load(html);
 
-    // First: try new method
-    let lyrics = $('[data-lyrics-container]')
-      .map((_, el) => $(el).text())
-      .get()
-      .join('\n\n');
-
-    // Fallback: try old method
-    if (!lyrics) {
-      lyrics = $('.lyrics').text().trim();
-    }
-
-    if (!lyrics) {
-      return res.status(404).json({ error: 'Lyrics not found on page' });
-    }
-
+    // 🔍 TEMP DEBUG: just send back raw HTML so we can inspect it
+    res.setHeader('Content-Type', 'text/html');
     res.status(200).send(html);
   } catch (err) {
-    console.error('Failed to scrape lyrics:', err);
-    res.status(500).json({ error: 'Failed to fetch or parse lyrics' });
+    console.error('Error fetching lyrics page:', err);
+    res.status(500).json({ error: 'Failed to fetch page' });
   }
 };
-
