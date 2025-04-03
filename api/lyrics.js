@@ -2,7 +2,7 @@ const fetch = require('node-fetch');
 
 module.exports = async (req, res) => {
   const { title } = req.query;
-  const accessToken = process.env.GENIUS_ACCESS_TOKEN;  // Get the Genius Access Token
+  const accessToken = process.env.GENIUS_ACCESS_TOKEN;
 
   // Ensure title and access token are provided
   if (!title) {
@@ -47,9 +47,11 @@ module.exports = async (req, res) => {
     const songData = await songResponse.json();
     const lyricsPath = songData.response.song.path;
 
-    // Step 3: Scrape the lyrics from the Genius song page
+    // Step 3: Scrape the lyrics using a proxy to avoid CORS issues
     const lyricsPageUrl = `https://genius.com${lyricsPath}`;
-    const lyricsPageResponse = await fetch(lyricsPageUrl);
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(lyricsPageUrl)}`;
+
+    const lyricsPageResponse = await fetch(proxyUrl);
 
     if (!lyricsPageResponse.ok) {
       throw new Error(`Failed to fetch lyrics page with status: ${lyricsPageResponse.status}`);
