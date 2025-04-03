@@ -18,9 +18,13 @@ module.exports = async (req, res) => {
     const $ = cheerio.load(html);
 
     // First try new Genius layout
-    let lyrics = $('[data-lyrics-container]')
-      .map((_, el) => $(el).text())
+    const lyricsContainers = $('[data-lyrics-container]');
+
+    let lyrics = lyricsContainers
+      .find('span')
+      .map((_, el) => $(el).text().trim())
       .get()
+      .filter(line => line && !/contributors|translations/i.test(line)) // 🧽 filter junk
       .join('\n\n');
 
     // Fallback for older layout
