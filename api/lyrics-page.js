@@ -34,7 +34,7 @@ module.exports = async (req, res) => {
       return res.status(404).json({ error: 'Lyrics not found on page' });
     }
 
-    res.status(200).json({ lyrics });
+    res.status(200).send(html);
   } catch (err) {
     console.error('Failed to scrape lyrics:', err);
     res.status(500).json({ error: 'Failed to fetch or parse lyrics' });
