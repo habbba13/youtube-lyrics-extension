@@ -13,12 +13,13 @@ module.exports = async (req, res) => {
   const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(title)}`;
 
   try {
-    // Step 1: Search for song
     const searchResponse = await fetch(searchUrl, {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
+
     const searchData = await searchResponse.json();
     const hits = searchData?.response?.hits || [];
+
     console.log('[Genius Hits]', hits.map(h => h.result.full_title));
     console.log('[Using Title]', title);
 
@@ -26,46 +27,34 @@ module.exports = async (req, res) => {
       return res.status(404).json({ error: 'No results found on Genius' });
     }
 
-    // Step 2: Try to find a clean match using normalized slug match
-    const normalize = str =>
-      str.toLowerCase()
-        .replace(/[^a-z0-9]/gi, '-') // Genius slug style
-        .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '');
-
-    const searchSlug = normalize(title);
+    // Step 1: try to avoid translations, but be relaxed otherwise
     const bestHit = hits.find(hit => {
       const url = hit.result.url.toLowerCase();
-      const path = hit.result.path.toLowerCase();
       return (
         hit.result.type === 'song' &&
-        url.includes(searchSlug) &&
         !url.includes('translation') &&
-        !url.includes('traducao') &&
-        !path.includes('news') &&
-        !path.includes('bio')
+        !url.includes('traducao')
       );
     }) || hits.find(hit => hit.result.type === 'song') || hits[0];
 
     console.log('[Chosen URL]', bestHit.result.url);
+
     const songId = bestHit.result.id;
 
-    // Step 3: Fetch full song data via Genius API
+    // Step 2: Use Genius song ID to fetch full song data
     const songResponse = await fetch(`https://api.genius.com/songs/${songId}?text_format=plain`, {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
     const songData = await songResponse.json();
     const song = songData?.response?.song;
 
-    // Step 4: If API provides lyrics (rare), send them — else send URL to be scraped
     if (song?.lyrics?.plain) {
       return res.status(200).json({ lyrics: song.lyrics.plain });
     }
 
-    // Step 5: Return URL so frontend can scrape if needed
     return res.status(200).json({ lyricsUrl: song.url });
   } catch (error) {
-    console.error('Genius hybrid fetch error:', error);
+    console.error('Genius relaxed fetch error:', error);
     res.status(500).json({ error: 'Failed to retrieve lyrics from Genius' });
   }
 };
