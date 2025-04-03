@@ -1,6 +1,7 @@
 const fetch = require('node-fetch');
+const AbortController = require('abort-controller');
 
-let cache = {}; // Simple in-memory cache to store fetched lyrics
+let cache = {}; // Simple in-memory cache for lyrics
 
 module.exports = async (req, res) => {
   const { title } = req.query;
@@ -19,16 +20,11 @@ module.exports = async (req, res) => {
   }
 
   try {
-    // Search for the song
+    // Step 1: Search for the song on Genius
     const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(title)}`;
-    const searchResponse = await fetch(searchUrl, {
+    const searchResponse = await fetchWithTimeout(searchUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-
-    if (!searchResponse.ok) {
-      return res.status(searchResponse.status).json({ error: 'Error fetching song search results.' });
-    }
-
     const searchData = await searchResponse.json();
     const song = searchData.response.hits[0]?.result;
 
@@ -36,67 +32,59 @@ module.exports = async (req, res) => {
       return res.status(404).json({ error: 'Song not found on Genius.' });
     }
 
-    // Fetch song details
+    // Step 2: Fetch song details using the song ID
     const songUrl = `https://api.genius.com/songs/${song.id}`;
-    const songResponse = await fetch(songUrl, {
+    const songResponse = await fetchWithTimeout(songUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-
-    if (!songResponse.ok) {
-      return res.status(songResponse.status).json({ error: 'Error fetching song details.' });
-    }
-
     const songData = await songResponse.json();
-    const lyricsPath = songData.response.song.path;
+    const lyricsUrl = songData.response.song.url;
 
-    if (!lyricsPath) {
-      return res.status(404).json({ error: 'Lyrics path not found on Genius.' });
+    if (!lyricsUrl) {
+      return res.status(404).json({ error: 'Lyrics URL not found.' });
     }
 
-    // Fetch lyrics using a proxy to bypass CORS
-    const lyricsPageUrl = `https://genius.com${lyricsPath}`;
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(lyricsPageUrl)}`;
-
-    const lyricsPageResponse = await fetch(proxyUrl);
-
-    if (!lyricsPageResponse.ok) {
-      return res.status(lyricsPageResponse.status).json({ error: 'Error fetching lyrics page.' });
-    }
-
+    // Step 3: Scrape the lyrics page to extract lyrics
+    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(lyricsUrl)}`;
+    const lyricsPageResponse = await fetchWithTimeout(proxyUrl);
     const lyricsPageData = await lyricsPageResponse.json();
-    if (!lyricsPageData.contents) {
-      return res.status(500).json({ error: 'Failed to retrieve lyrics page content.' });
-    }
-
     const lyrics = extractLyrics(lyricsPageData.contents);
 
     if (!lyrics) {
       return res.status(404).json({ error: 'Lyrics not found on Genius.' });
     }
 
-    // Cache lyrics to reduce API calls
+    // Cache the lyrics for future requests
     cache[title] = lyrics;
-
     res.status(200).json({ lyrics });
-
   } catch (error) {
     console.error('Error fetching lyrics:', error);
-    res.status(500).json({ error: 'Internal server error.' });
+    res.status(500).json({ error: 'Failed to fetch lyrics.' });
   }
 };
 
-// Helper function to extract lyrics from the Genius song page HTML
+// Helper function to extract lyrics from HTML
 function extractLyrics(html) {
   const regex = /<div class="Lyrics__Container.*?>(.*?)<\/div>/gs;
   let lyrics = '';
   let match;
 
   while ((match = regex.exec(html)) !== null) {
-    lyrics += match[1]
-      .replace(/<br\s*\/?>/g, '\n')
-      .replace(/<.*?>/g, '')
-      .trim() + '\n\n';
+    lyrics += match[1].replace(/<br\s*\/?>(?<!<a)/g, '\n')
+                      .replace(/<.*?>/g, '')
+                      .trim() + '\n\n';
   }
 
-  return lyrics.trim() || null;
+  return lyrics.trim();
+}
+
+// Helper function to add a timeout to fetch requests
+async function fetchWithTimeout(url, options = {}, timeout = 10000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
