@@ -2,7 +2,7 @@
 const fetch = require('node-fetch');
 
 module.exports = async (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader(" "Access-Control-Allow-Origin", "*");
 
   const { title } = req.query;
   if (!title) {
@@ -24,22 +24,27 @@ module.exports = async (req, res) => {
       return res.status(404).json({ error: 'No results found on Genius' });
     }
 
-    const normalizedTitle = title.toLowerCase();
-    const filteredHits = hits.filter(hit => {
-      const fullTitle = hit.result.full_title.toLowerCase();
+    const normalize = str =>
+      str.toLowerCase()
+        .replace(/[^a-z0-9 ]/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+
+    const searchNormalized = normalize(title);
+
+    const bestMatch = hits.find(hit => {
+      const fullTitle = normalize(hit.result.full_title);
       const pagePath = hit.result.path.toLowerCase();
       return (
         hit.result.type === 'song' &&
-        !pagePath.includes("translation") &&
-        !pagePath.includes("traducao") &&
-        !pagePath.includes("news") &&
-        !pagePath.includes("bio") &&
-        !pagePath.includes("tracklist") &&
-        fullTitle.includes(normalizedTitle.split("-")[0].trim())
+        fullTitle.includes(searchNormalized) &&
+        !pagePath.includes('translation') &&
+        !pagePath.includes('traducao') &&
+        !pagePath.includes('news') &&
+        !pagePath.includes('bio') &&
+        !pagePath.includes('tracklist')
       );
-    });
-
-    const bestMatch = filteredHits[0] || hits.find(hit => hit.result.type === 'song') || hits[0];
+    }) || hits.find(hit => hit.result.type === 'song') || hits[0];
 
     const lyricsUrl = bestMatch.result.url;
     res.status(200).json({ lyricsUrl });
