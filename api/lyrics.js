@@ -3,7 +3,11 @@ const fetch = require('node-fetch');
 module.exports = async (req, res) => {
   const { title } = req.query;
   const accessToken = process.env.GENIUS_ACCESS_TOKEN;
-
+  const response = await fetch(apiUrl, {
+     headers: {
+       Authorization: `Bearer ${accessToken}`,
+     }, 
+  });
   if (!accessToken) {
     return res.status(500).json({ error: 'Genius API access token is missing.' });
   }
