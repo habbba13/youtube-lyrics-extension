@@ -8,6 +8,7 @@ module.exports = async (req, res) => {
   const { title } = req.query;
   const accessToken = process.env.GENIUS_ACCESS_TOKEN;
 
+  // Validate input
   if (!title) {
     return res.status(400).json({ error: 'Song title is required.' });
   }
@@ -15,6 +16,7 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: 'Genius API access token is missing.' });
   }
 
+  // Check cache for lyrics
   if (cache[title]) {
     console.log("Returning cached lyrics for:", title);
     return res.status(200).json({ lyrics: cache[title] });
@@ -31,20 +33,19 @@ module.exports = async (req, res) => {
     // Log all search hits for better inspection
     console.log("All Search Hits:", searchData.response.hits);
 
+    // Select the song from the search results (based on title)
     const song = searchData.response.hits.find(hit => {
-    // Match the song based on title and artist (you can refine this logic further)
-    return hit.result.title.toLowerCase() === title.toLowerCase();
-  });
+      return hit.result.title.toLowerCase() === title.toLowerCase();
+    });
     
     if (!song) {
       return res.status(404).json({ error: 'Song not found on Genius.' });
     }
 
     console.log("Matched Song:", song); // Log the matched song for verification
-    // Proceed with fetching song details as usual...
 
     // Step 2: Fetch song details using the song ID
-    const songUrl = `https://api.genius.com/songs/${song.id}`;
+    const songUrl = `https://api.genius.com/songs/${song.result.id}`;
     const songResponse = await fetchWithTimeout(songUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
@@ -63,7 +64,9 @@ module.exports = async (req, res) => {
 
     // Use JSDOM to parse the HTML and extract the lyrics
     const dom = new JSDOM(lyricsPageHtml);
-    const lyricsElement = dom.window.document.querySelector('.lyrics');
+    // Update selector to match the lyrics container (Genius uses different classes for lyrics)
+    const lyricsElement = dom.window.document.querySelector('.lyrics'); // Check if this works or change the selector
+
     const lyrics = lyricsElement ? lyricsElement.textContent : null;
 
     if (!lyrics) {
@@ -73,6 +76,7 @@ module.exports = async (req, res) => {
     // Cache the lyrics for future requests
     cache[title] = lyrics;
     res.status(200).json({ lyrics });
+
   } catch (error) {
     console.error('Error fetching lyrics:', error);
     res.status(500).json({ error: 'Failed to fetch lyrics.' });
