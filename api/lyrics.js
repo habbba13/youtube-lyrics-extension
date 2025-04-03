@@ -1,5 +1,7 @@
 const fetch = require('node-fetch');
 
+let cache = {}; // Simple in-memory cache to store fetched lyrics
+
 module.exports = async (req, res) => {
   const { title } = req.query;
   const accessToken = process.env.GENIUS_ACCESS_TOKEN;
@@ -10,6 +12,12 @@ module.exports = async (req, res) => {
   }
   if (!accessToken) {
     return res.status(500).json({ error: 'Genius API access token is missing.' });
+  }
+
+  // Check if the lyrics are already cached
+  if (cache[title]) {
+    console.log("Returning cached lyrics for:", title);
+    return res.status(200).json({ lyrics: cache[title] });
   }
 
   try {
@@ -63,6 +71,9 @@ module.exports = async (req, res) => {
     if (!lyrics) {
       return res.status(404).json({ error: 'Lyrics not found on Genius.' });
     }
+
+    // Cache the lyrics for future requests
+    cache[title] = lyrics;
 
     // Return the lyrics as the response
     res.status(200).json({ lyrics });
