@@ -55,7 +55,13 @@ module.exports = async (req, res) => {
       return res.status(404).json({ error: 'Web page not found or not annotatable on Genius.' });
     }
 
+    // Logging Web Page Data for Debugging
     console.log('Web page data:', webPageData.response.web_page);
+
+    // If no annotations are found, log a warning but proceed to scrape lyrics
+    if (webPageData.response.web_page.annotation_count === 0) {
+      console.warn('No annotations found on this page. Proceeding with lyrics extraction.');
+    }
 
     // Step 4: Scrape the lyrics page to extract lyrics
     const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(lyricsUrl)}`;
@@ -101,3 +107,4 @@ async function fetchWithTimeout(url, options = {}, timeout = 10000) {
     clearTimeout(timeoutId);
   }
 }
+
