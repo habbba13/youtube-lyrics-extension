@@ -58,18 +58,26 @@ module.exports = async (req, res) => {
     }
   }
 
-  try {
-    let lyrics = await tryFetchLyrics();
+      try {
+      let lyrics = await tryFetchLyrics();
 
-    if (!lyrics) {
-      console.warn('[Retrying fetch]');
-      lyrics = await tryFetchLyrics();
-    }
+      if (!lyrics) {
+        console.warn('[Retrying fetch]');
+        await new Promise(resolve => setTimeout(resolve, 1500)); // small delay
+        lyrics = await tryFetchLyrics();
+  }
 
-    if (!lyrics) {
-      console.warn('[No Lyrics Found]');
-      return res.status(404).json({ error: 'Lyrics not found on page' });
-    }
+      if (!lyrics) {
+        console.warn('[No Lyrics Found]');
+        return res.status(404).json({ error: 'Lyrics not found on page' });
+  }
+
+      return res.status(200).json({ lyrics });
+    } catch (err) {
+      console.error('ScraperAPI error:', err);
+      return res.status(500).json({ error: 'Failed to scrape lyrics with ScraperAPI' });
+}
+
 
     res.status(200).json({ lyrics });
   } catch (err) {
