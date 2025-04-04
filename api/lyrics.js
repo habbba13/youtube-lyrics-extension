@@ -10,51 +10,50 @@ module.exports = async (req, res) => {
   }
 
   const accessToken = process.env.GENIUS_ACCESS_TOKEN;
-  const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(title)}`;
+
+  // Clean the title: strip parentheses, slashes, and odd characters
+  const cleanedTitle = title
+    .replace(/\(.*?\)/g, "")     // Remove (Official Video) etc.
+    .replace(/\[.*?\]/g, "")
+    .replace(/\s*\/\s*/g, " ")  // Replace slashes with space
+    .replace(/[-_]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  console.log('[Using Cleaned Title]', cleanedTitle);
+
+  const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(cleanedTitle)}`;
 
   try {
-    const searchResponse = await fetch(searchUrl, {
+    const response = await fetch(searchUrl, {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
+    const data = await response.json();
+    const hits = data?.response?.hits || [];
 
-    const searchData = await searchResponse.json();
-    const hits = searchData?.response?.hits || [];
+    console.log('[Genius Hits]', hits.map(hit => hit.result.full_title));
 
-    console.log('[Genius Hits]', hits.map(h => h.result.full_title));
-    console.log('[Using Title]', title);
-
-    if (hits.length === 0) {
-      return res.status(404).json({ error: 'No results found on Genius' });
+    if (!hits.length) {
+      return res.status(404).json({ error: 'No results from Genius' });
     }
 
-    // Step 1: try to avoid translations, but be relaxed otherwise
-    const bestHit = hits.find(hit => {
+    // Attempt to extract artist from title
+    const artistFromTitle = title.split('-')[0].replace(/[!@#$%^&*]/g, '').trim().toLowerCase();
+
+    const prioritized = hits.find(hit => {
       const url = hit.result.url.toLowerCase();
+      const artist = hit.result.primary_artist.name.toLowerCase();
       return (
-        hit.result.type === 'song' &&
-        !url.includes('translation') &&
-        !url.includes('traducao')
+        artist.includes(artistFromTitle) &&
+        (url.includes("laylow") || url.includes("i-see"))
       );
-    }) || hits.find(hit => hit.result.type === 'song') || hits[0];
+    }) || hits.find(hit => hit.result.primary_artist.name.toLowerCase().includes(artistFromTitle)) || hits[0];
 
-    console.log('[Chosen URL]', bestHit.result.url);
+    console.log('[Chosen URL]', prioritized.result.url);
 
-    const songId = bestHit.result.id;
-
-    // Step 2: Use Genius song ID to fetch full song data
-    const songResponse = await fetch(`https://api.genius.com/songs/${songId}?text_format=plain`, {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
-    const songData = await songResponse.json();
-    const song = songData?.response?.song;
-
-    if (song?.lyrics?.plain) {
-      return res.status(200).json({ lyrics: song.lyrics.plain });
-    }
-
-    return res.status(200).json({ lyricsUrl: song.url });
+    res.status(200).json({ lyricsUrl: prioritized.result.url });
   } catch (error) {
-    console.error('Genius relaxed fetch error:', error);
-    res.status(500).json({ error: 'Failed to retrieve lyrics from Genius' });
+    console.error("Genius API error:", error);
+    res.status(500).json({ error: 'Failed to fetch from Genius' });
   }
 };
