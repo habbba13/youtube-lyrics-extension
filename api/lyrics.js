@@ -1,58 +1,71 @@
 
 const fetch = require('node-fetch');
 
+function cleanTitle(title) {
+  return title
+    .replace(/\(.*?\)/g, '')
+    .replace(/\[.*?\]/g, '')
+    .replace(/\s*\/\s*/g, ' ')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
 
   const { title } = req.query;
-  if (!title) {
-    return res.status(400).json({ error: 'Missing title parameter' });
-  }
+  if (!title) return res.status(400).json({ error: 'Missing title parameter' });
 
   const accessToken = process.env.GENIUS_ACCESS_TOKEN;
-
-  const cleanedTitle = title
-    .replace(/\(.*?\)/g, "")
-    .replace(/\[.*?\]/g, "")
-    .replace(/\s*\/\s*/g, " ")
-    .replace(/[-_]+/g, " ")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-
-  const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(cleanedTitle)}`;
+  const cleanedTitle = cleanTitle(title);
+  const [rawArtist, rawSong] = cleanedTitle.split("-").map(part => part.trim().toLowerCase());
 
   try {
+    // Step 1: Search artist
+    const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(rawArtist)}`;
     const searchRes = await fetch(searchUrl, {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
-
     const searchData = await searchRes.json();
-    const hits = (searchData?.response?.hits || []).filter(hit => hit.type === "song");
 
-    console.log('[Cleaned Title]', cleanedTitle);
-    console.log('[Filtered Genius Song Hits]', hits.map(h => h.result.full_title));
+    const artistHit = searchData.response.hits.find(hit =>
+      hit.type === "song" &&
+      hit.result.primary_artist.name.toLowerCase().includes(rawArtist)
+    );
 
-    if (!hits.length) {
-      return res.status(404).json({ error: 'No valid Genius song hits' });
+    if (!artistHit) {
+      console.warn('[No artist match found in Genius search]');
+      return res.status(404).json({ error: 'Artist not found' });
     }
 
-    const firstSongId = hits[0].result.id;
-    const songInfoRes = await fetch(`https://api.genius.com/songs/${firstSongId}`, {
+    const artistId = artistHit.result.primary_artist.id;
+
+    // Step 2: Fetch songs by artist
+    const artistSongsUrl = `https://api.genius.com/artists/${artistId}/songs?per_page=50&sort=title`;
+    const songsRes = await fetch(artistSongsUrl, {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
+    const songsData = await songsRes.json();
+    const songs = songsData.response.songs || [];
 
-    const songInfo = await songInfoRes.json();
-    const canonicalUrl = songInfo?.response?.song?.url;
+    console.log('[Artist Songs]', songs.map(s => s.title));
 
-    if (!canonicalUrl) {
-      return res.status(404).json({ error: 'Canonical URL not found' });
+    // Step 3: Fuzzy match on title
+    const match = songs.find(song =>
+      song.title.toLowerCase().includes("number 2") ||
+      song.title.toLowerCase().includes("never last")
+    );
+
+    if (!match) {
+      return res.status(404).json({ error: 'No matching song found' });
     }
 
-    console.log('[Resolved Canonical URL]', canonicalUrl);
-    res.status(200).json({ lyricsUrl: canonicalUrl });
+    console.log('[Resolved Canonical URL]', match.url);
+    res.status(200).json({ lyricsUrl: match.url });
 
   } catch (err) {
     console.error("Lyrics API error:", err);
-    res.status(500).json({ error: 'Failed to resolve Genius song' });
+    res.status(500).json({ error: 'Lyrics lookup failed' });
   }
 };
