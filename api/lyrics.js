@@ -1,13 +1,27 @@
 
 const fetch = require('node-fetch');
+const fs = require('fs');
+const path = require('path');
 
-const artistMap = {
+const artistMapFile = path.resolve(__dirname, 'artistMap.json');
+let artistMap = {
   "lil tecca": 213210,
   "yeat": 2193783,
   "drake": 130,
   "kendrick lamar": 1421,
   "gunnr": 1309438
 };
+
+// Load dynamic artist map from JSON
+try {
+  if (fs.existsSync(artistMapFile)) {
+    const data = fs.readFileSync(artistMapFile, 'utf-8');
+    const parsed = JSON.parse(data);
+    artistMap = { ...artistMap, ...parsed };
+  }
+} catch (err) {
+  console.warn('Failed to load artistMap.json:', err.message);
+}
 
 function cleanTitle(title) {
   return title
@@ -17,6 +31,15 @@ function cleanTitle(title) {
     .replace(/[-_]+/g, ' ')
     .replace(/\s{2,}/g, ' ')
     .trim();
+}
+
+function saveNewArtist(name, id) {
+  const current = fs.existsSync(artistMapFile) ? JSON.parse(fs.readFileSync(artistMapFile)) : {};
+  if (!current[name]) {
+    current[name] = id;
+    fs.writeFileSync(artistMapFile, JSON.stringify(current, null, 2));
+    console.log('[ArtistMap Updated]', name, id);
+  }
 }
 
 module.exports = async (req, res) => {
@@ -61,7 +84,7 @@ module.exports = async (req, res) => {
 
     const firstArtist = songHitsOnly[0]?.result?.primary_artist;
     if (firstArtist && !artistMap[rawArtist]) {
-      console.log('[New Artist ID]', firstArtist.id, '-', firstArtist.name);
+      saveNewArtist(rawArtist, firstArtist.id);
     }
 
     let songHit = songHitsOnly.find(hit =>
