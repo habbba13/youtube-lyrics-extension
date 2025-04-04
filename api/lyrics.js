@@ -1,4 +1,3 @@
-
 const fetch = require('node-fetch');
 const Redis = require('ioredis');
 
@@ -58,9 +57,9 @@ module.exports = async (req, res) => {
   console.log('[Cleaned]', { rawArtist, rawSong });
 
   try {
-    const searchUrl = \`https://api.genius.com/search?q=\${encodeURIComponent(cleanedTitle)}&t=\${Date.now()}\`;
+    const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(cleanedTitle)}&t=${Date.now()}`;
     const searchRes = await fetch(searchUrl, {
-      headers: { Authorization: \`Bearer \${accessToken}\` }
+      headers: { Authorization: `Bearer ${accessToken}` }
     });
     const searchData = await searchRes.json();
     const hits = searchData?.response?.hits || [];
@@ -75,7 +74,7 @@ module.exports = async (req, res) => {
     songHitsOnly.forEach((hit, i) => {
       const artist = hit.result.primary_artist.name;
       const songTitle = hit.result.title;
-      console.log(\`[\${i}] \${artist} - \${songTitle}\`);
+      console.log(`[${i}] ${artist} - ${songTitle}`);
     });
 
     const songHit = songHitsOnly.find(hit =>
@@ -86,8 +85,8 @@ module.exports = async (req, res) => {
 
     if (songHit) {
       const songId = songHit.result.id;
-      const songRes = await fetch(\`https://api.genius.com/songs/\${songId}\`, {
-        headers: { Authorization: \`Bearer \${accessToken}\` }
+      const songRes = await fetch(`https://api.genius.com/songs/${songId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
       });
       const songData = await songRes.json();
       const songUrl = songData?.response?.song?.url;
@@ -101,9 +100,9 @@ module.exports = async (req, res) => {
       return res.status(404).json({ error: 'Lyrics not found and no fallback available' });
     }
 
-    const artistSongsUrl = \`https://api.genius.com/artists/\${artistId}/songs?per_page=50&sort=title\`;
+    const artistSongsUrl = `https://api.genius.com/artists/${artistId}/songs?per_page=50&sort=title`;
     const songsRes = await fetch(artistSongsUrl, {
-      headers: { Authorization: \`Bearer \${accessToken}\` }
+      headers: { Authorization: `Bearer ${accessToken}` }
     });
     const songsData = await songsRes.json();
     const songs = songsData?.response?.songs || [];
@@ -127,4 +126,3 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: 'Lyrics lookup failed' });
   }
 };
-
