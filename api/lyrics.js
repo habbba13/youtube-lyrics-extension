@@ -46,7 +46,11 @@ module.exports = async (req, res) => {
     const searchData = await searchRes.json();
     const hits = searchData?.response?.hits || [];
 
-    const songHitsOnly = hits.filter(hit => hit.type === "song" && hit.index === "song");
+    const songHitsOnly = hits.filter(hit =>
+      hit.type === "song" &&
+      hit.index === "song" &&
+      !/translations|traducciones|traducao|перевод|переклад/i.test(hit.result.primary_artist.name)
+    );
 
     console.log('[Filtered Song Hits]');
     songHitsOnly.forEach((hit, i) => {
@@ -55,13 +59,17 @@ module.exports = async (req, res) => {
       console.log(`[${i}] ${artist} - ${songTitle}`);
     });
 
+    const firstArtist = songHitsOnly[0]?.result?.primary_artist;
+    if (firstArtist && !artistMap[rawArtist]) {
+      console.log('[New Artist ID]', firstArtist.id, '-', firstArtist.name);
+    }
+
     let songHit = songHitsOnly.find(hit =>
       rawSong &&
       hit.result.primary_artist.name.toLowerCase().includes(rawArtist) &&
       hit.result.title.toLowerCase().includes(rawSong)
     );
 
-    // fallback to top hit if no match and no rawSong
     if (!songHit && songHitsOnly.length > 0 && !rawSong) {
       songHit = songHitsOnly[0];
       console.log('[Fallback to Top Hit]', songHit.result.full_title);
