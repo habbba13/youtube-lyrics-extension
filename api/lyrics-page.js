@@ -1,13 +1,16 @@
-
 const fetch = require('node-fetch');
 const cheerio = require('cheerio');
 
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end(); // Handle preflight
+  }
 
   const { url } = req.query;
-  console.log('[Scraping]', url);
-
   if (!url) {
     return res.status(400).json({ error: 'Missing Genius URL' });
   }
@@ -16,33 +19,43 @@ module.exports = async (req, res) => {
   const scraperUrl = `http://api.scraperapi.com?api_key=${apiKey}&url=${encodeURIComponent(url)}&render=true`;
 
   async function tryFetchLyrics() {
-    const response = await fetch(scraperUrl);
-    const html = await response.text();
-    const $ = cheerio.load(html);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000); // 8 second timeout
 
-    const lyricsContainers = $('[data-lyrics-container]');
-    let lyrics = lyricsContainers
-      .map((_, el) => {
-        return $(el)
-          .contents()
-          .map((_, child) => $(child).text())
-          .get()
-          .join('\n');
-      })
-      .get()
-      .join('\n');
+    try {
+      const response = await fetch(scraperUrl, { signal: controller.signal });
+      clearTimeout(timeout);
+      const html = await response.text();
+      const $ = cheerio.load(html);
 
-    lyrics = lyrics
-      .split('\n')
-      .map(line => line.trim())
-      .filter(line => line && !/contributors|translations|avatars|lyrics/i.test(line))
-      .join('\n');
+      const lyricsContainers = $('[data-lyrics-container]');
+      let lyrics = lyricsContainers
+        .map((_, el) => {
+          return $(el)
+            .contents()
+            .map((_, child) => $(child).text())
+            .get()
+            .join('\n');
+        })
+        .get()
+        .join('\n');
 
-    if (!lyrics) {
-      lyrics = $('.lyrics').text().trim();
+      lyrics = lyrics
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line && !/contributors|translations|avatars|lyrics/i.test(line))
+        .join('\n');
+
+      if (!lyrics) {
+        lyrics = $('.lyrics').text().trim();
+      }
+
+      return lyrics;
+    } catch (err) {
+      clearTimeout(timeout);
+      console.error('[Fetch error]', err.name === 'AbortError' ? 'Request timed out' : err);
+      return null;
     }
-
-    return lyrics;
   }
 
   try {
@@ -64,4 +77,3 @@ module.exports = async (req, res) => {
     res.status(500).json({ error: 'Failed to scrape lyrics with ScraperAPI' });
   }
 };
-
