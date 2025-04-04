@@ -21,9 +21,10 @@ module.exports = async (req, res) => {
 
   const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(cleanedTitle)}`;
 
-  const searchRes = await fetch(searchUrl, {
-    headers: { Authorization: `Bearer ${accessToken}` }
-  });
+  try {
+    const searchRes = await fetch(searchUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
 
     const searchData = await searchRes.json();
     const hits = (searchData?.response?.hits || []).filter(hit => hit.type === "song");
@@ -49,3 +50,9 @@ module.exports = async (req, res) => {
 
     console.log('[Resolved Canonical URL]', canonicalUrl);
     res.status(200).json({ lyricsUrl: canonicalUrl });
+
+  } catch (err) {
+    console.error("Lyrics API error:", err);
+    res.status(500).json({ error: 'Failed to resolve Genius song' });
+  }
+};
