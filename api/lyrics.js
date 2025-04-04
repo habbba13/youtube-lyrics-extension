@@ -22,7 +22,6 @@ module.exports = async (req, res) => {
   const [rawArtist, rawSong] = cleanedTitle.split("-").map(part => part.trim().toLowerCase());
 
   try {
-    // Step 1: Search artist through song hits
     const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(rawArtist)}`;
     const searchRes = await fetch(searchUrl, {
       headers: { Authorization: `Bearer ${accessToken}` }
@@ -30,6 +29,14 @@ module.exports = async (req, res) => {
     const searchData = await searchRes.json();
 
     const songHits = searchData?.response?.hits || [];
+
+    console.log('[Search Hits Returned]');
+    songHits.forEach((hit, i) => {
+      const artist = hit.result.primary_artist.name;
+      const title = hit.result.title_with_featured || hit.result.full_title;
+      console.log(`[${i}] ${artist} - ${title}`);
+    });
+
     const matchHit = songHits.find(hit =>
       hit.type === "song" &&
       hit.result.primary_artist.name.toLowerCase().includes(rawArtist)
@@ -42,7 +49,6 @@ module.exports = async (req, res) => {
 
     const artistId = matchHit.result.primary_artist.id;
 
-    // Step 2: Get all songs from that artist
     const artistSongsUrl = `https://api.genius.com/artists/${artistId}/songs?per_page=50&sort=title`;
     const songsRes = await fetch(artistSongsUrl, {
       headers: { Authorization: `Bearer ${accessToken}` }
@@ -52,7 +58,6 @@ module.exports = async (req, res) => {
 
     console.log('[Artist Songs]', songs.map(s => s.title));
 
-    // Step 3: Fuzzy match on title
     const match = songs.find(song =>
       song.title.toLowerCase().includes("number 2") ||
       song.title.toLowerCase().includes("never last")
