@@ -13,9 +13,9 @@ module.exports = async (req, res) => {
   }
 
   const apiKey = process.env.SCRAPER_API_KEY;
-  const scraperUrl = `http://api.scraperapi.com?api_key=${apiKey}&url=${encodeURIComponent(url)}&render=false&autoparse=false&cache=false`;
+  const scraperUrl = `http://api.scraperapi.com?api_key=${apiKey}&url=${encodeURIComponent(url)}&render=true`;
 
-  try {
+  async function tryFetchLyrics() {
     const response = await fetch(scraperUrl);
     const html = await response.text();
     const $ = cheerio.load(html);
@@ -42,6 +42,17 @@ module.exports = async (req, res) => {
       lyrics = $('.lyrics').text().trim();
     }
 
+    return lyrics;
+  }
+
+  try {
+    let lyrics = await tryFetchLyrics();
+
+    if (!lyrics) {
+      console.warn('[Retrying fetch]');
+      lyrics = await tryFetchLyrics();
+    }
+
     if (!lyrics) {
       console.warn('[No Lyrics Found]');
       return res.status(404).json({ error: 'Lyrics not found on page' });
@@ -53,3 +64,4 @@ module.exports = async (req, res) => {
     res.status(500).json({ error: 'Failed to scrape lyrics with ScraperAPI' });
   }
 };
+
