@@ -27,12 +27,17 @@ module.exports = async (req, res) => {
 
   const accessToken = process.env.GENIUS_ACCESS_TOKEN;
   const cleanedTitle = cleanTitle(title);
-  const [rawArtist, rawSong] = cleanedTitle.split("-").map(part => part.trim().toLowerCase());
+
+  let rawArtist = '', rawSong = '';
+  if (cleanedTitle.includes('-')) {
+    [rawArtist, rawSong] = cleanedTitle.split('-').map(p => p.trim().toLowerCase());
+  } else {
+    rawArtist = cleanedTitle.toLowerCase();
+  }
 
   console.log('[Cleaned]', { rawArtist, rawSong });
 
   try {
-    // Add timestamp to avoid cached results
     const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(cleanedTitle)}&t=${Date.now()}`;
     const searchRes = await fetch(searchUrl, {
       headers: { Authorization: `Bearer ${accessToken}` }
@@ -50,6 +55,7 @@ module.exports = async (req, res) => {
     });
 
     const songHit = songHitsOnly.find(hit =>
+      rawSong &&
       hit.result.primary_artist.name.toLowerCase().includes(rawArtist) &&
       hit.result.title.toLowerCase().includes(rawSong)
     );
@@ -65,7 +71,7 @@ module.exports = async (req, res) => {
       return res.status(200).json({ lyricsUrl: songUrl });
     }
 
-    // Fallback: use artistMap and search songs by artist ID
+    // Fallback if artistMap has an entry
     const artistId = artistMap[rawArtist];
     if (!artistId) {
       console.warn('[Fallback Failed: No artistMap match]');
@@ -82,7 +88,7 @@ module.exports = async (req, res) => {
     console.log('[Fallback Artist Songs]', songs.map(s => s.title));
 
     const match = songs.find(song =>
-      song.title.toLowerCase().includes(rawSong)
+      song.title.toLowerCase().includes(rawSong || '')
     );
 
     if (!match) {
