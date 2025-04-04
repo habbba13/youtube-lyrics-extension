@@ -20,6 +20,7 @@ function cleanTitle(title) {
 
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Cache-Control", "no-store");
 
   const { title } = req.query;
   if (!title) return res.status(400).json({ error: 'Missing title parameter' });
@@ -31,8 +32,8 @@ module.exports = async (req, res) => {
   console.log('[Cleaned]', { rawArtist, rawSong });
 
   try {
-    // Try full search first to get the song ID
-    const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(cleanedTitle)}`;
+    // Add timestamp to avoid cached results
+    const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(cleanedTitle)}&t=${Date.now()}`;
     const searchRes = await fetch(searchUrl, {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
