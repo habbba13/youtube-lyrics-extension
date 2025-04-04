@@ -3,8 +3,6 @@ const cheerio = require('cheerio');
 
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   res.setHeader("Cache-Control", "no-store");
 
   if (req.method === 'OPTIONS') {
@@ -12,28 +10,22 @@ module.exports = async (req, res) => {
   }
 
   const { url } = req.query;
-  if (!url) {
-    return res.status(400).json({ error: 'Missing Genius URL' });
-  }
+  if (!url) return res.status(400).json({ error: 'Missing Genius URL' });
 
   const apiKey = process.env.SCRAPER_API_KEY;
-  const scraperUrl = (key) =>
-    `http://api.scraperapi.com?api_key=${key}&url=${encodeURIComponent(url)}&render=true`;
+  const scraperUrl = `http://api.scraperapi.com?api_key=${apiKey}&url=${encodeURIComponent(url)}&render=true`;
 
-  async function tryScrape(attempt = 1) {
+  const tryFetchLyrics = async () => {
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000); // 10s max
-      const response = await fetch(scraperUrl(apiKey), { signal: controller.signal });
-      clearTimeout(timeout);
-
-      const html = await response.text();
-
-      if (!html || html.startsWith("An error occurred")) {
-        throw new Error("Bad HTML from ScraperAPI");
+      const response = await fetch(scraperUrl, { timeout: 15000 });
+      if (!response.ok) {
+        console.warn(`[ScraperAPI Error] ${response.status} ${response.statusText}`);
+        return null;
       }
 
+      const html = await response.text();
       const $ = cheerio.load(html);
+
       const lyricsContainers = $('[data-lyrics-container]');
       let lyrics = lyricsContainers
         .map((_, el) => {
@@ -58,27 +50,26 @@ module.exports = async (req, res) => {
 
       return lyrics || null;
     } catch (err) {
-      console.warn(`[Attempt ${attempt}] Scrape error:`, err.message);
+      console.error('[ScraperAPI Fetch Error]', err.message || err);
       return null;
     }
-  }
+  };
 
   try {
-    let lyrics = null;
-    const maxTries = 3;
-    for (let i = 1; i <= maxTries; i++) {
-      lyrics = await tryScrape(i);
-      if (lyrics) break;
-      await new Promise(resolve => setTimeout(resolve, i * 1000)); // exponential backoff
+    let lyrics = await tryFetchLyrics();
+
+    if (!lyrics) {
+      console.warn('[Retrying fetch]');
+      lyrics = await tryFetchLyrics();
     }
 
     if (!lyrics) {
-      return res.status(504).json({ error: 'Lyrics not found or scraper timed out' });
+      return res.status(404).json({ error: 'Lyrics not found on page' });
     }
 
-    return res.status(200).json({ lyrics });
+    res.status(200).json({ lyrics });
   } catch (err) {
-    console.error('[Lyrics Scraper Fatal]', err);
-    return res.status(500).json({ error: 'Lyrics scraping failed' });
+    console.error('[Handler Error]', err.message || err);
+    return res.status(500).json({ error: 'Failed to scrape lyrics page' });
   }
 };
