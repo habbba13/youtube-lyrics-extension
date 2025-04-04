@@ -3,7 +3,7 @@ const { Redis } = require('@upstash/redis');
 
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN,
+  token: process.env.UPSTASH_REDIS_REST_TOKEN
 });
 
 function cleanTitle(title) {
@@ -83,11 +83,11 @@ module.exports = async (req, res) => {
       console.log(`[${i}] ${artist} - ${songTitle}`);
     });
 
-    const songHit = songHitsOnly.find(hit =>
-      rawSong &&
-      hit.result.primary_artist.name.toLowerCase().includes(rawArtist) &&
-      hit.result.title.toLowerCase().includes(rawSong)
-    );
+    const songHit = songHitsOnly.find(hit => {
+      const artistMatch = hit.result.primary_artist.name.toLowerCase().includes(rawArtist);
+      const songMatch = rawSong ? hit.result.title.toLowerCase().includes(rawSong) : true;
+      return artistMatch && songMatch;
+    });
 
     if (songHit) {
       const songId = songHit.result.id;
@@ -132,3 +132,4 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: 'Lyrics lookup failed' });
   }
 };
+
