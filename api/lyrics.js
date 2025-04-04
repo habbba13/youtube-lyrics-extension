@@ -22,7 +22,8 @@ module.exports = async (req, res) => {
   const [rawArtist, rawSong] = cleanedTitle.split("-").map(part => part.trim().toLowerCase());
 
   try {
-    const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(rawArtist)}`;
+    // Step 1: Full search using full title
+    const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(cleanedTitle)}`;
     const searchRes = await fetch(searchUrl, {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
@@ -37,18 +38,20 @@ module.exports = async (req, res) => {
       console.log(`[${i}] ${artist} - ${title}`);
     });
 
+    // Step 2: Force match only hits from correct artist
     const matchHit = songHits.find(hit =>
       hit.type === "song" &&
       hit.result.primary_artist.name.toLowerCase().includes(rawArtist)
     );
 
     if (!matchHit) {
-      console.warn('[No artist match found in Genius search hits]');
-      return res.status(404).json({ error: 'Artist not found from hits' });
+      console.warn('[No artist match found from full query]');
+      return res.status(404).json({ error: 'Artist not found from query' });
     }
 
     const artistId = matchHit.result.primary_artist.id;
 
+    // Step 3: Use artist ID to list songs and match fuzzy title
     const artistSongsUrl = `https://api.genius.com/artists/${artistId}/songs?per_page=50&sort=title`;
     const songsRes = await fetch(artistSongsUrl, {
       headers: { Authorization: `Bearer ${accessToken}` }
@@ -64,7 +67,7 @@ module.exports = async (req, res) => {
     );
 
     if (!match) {
-      return res.status(404).json({ error: 'No matching song found' });
+      return res.status(404).json({ error: 'No matching song found from artist' });
     }
 
     console.log('[Resolved Canonical URL]', match.url);
