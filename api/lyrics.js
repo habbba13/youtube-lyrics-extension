@@ -1,6 +1,13 @@
 
 const fetch = require('node-fetch');
 
+const artistMap = {
+  "lil tecca": 213210,
+  "yeat": 2193783,
+  "drake": 130,
+  "kendrick lamar": 1421
+};
+
 function cleanTitle(title) {
   return title
     .replace(/\(.*?\)/g, '')
@@ -22,34 +29,45 @@ module.exports = async (req, res) => {
   const [rawArtist, rawSong] = cleanedTitle.split("-").map(part => part.trim().toLowerCase());
 
   try {
-    // Step 1: Search using only the artist name
-    const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(rawArtist)}`;
+    // Try full search first to get the song ID
+    const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(cleanedTitle)}`;
     const searchRes = await fetch(searchUrl, {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
     const searchData = await searchRes.json();
+    const hits = searchData?.response?.hits || [];
 
-    const songHits = searchData?.response?.hits || [];
-    console.log('[Artist-Only Search Hits]');
-    songHits.forEach((hit, i) => {
+    console.log('[Search Hits]');
+    hits.forEach((hit, i) => {
       const artist = hit.result.primary_artist.name;
-      const title = hit.result.title_with_featured || hit.result.full_title;
-      console.log(`[${i}] ${artist} - ${title}`);
+      const songTitle = hit.result.title;
+      console.log(`[${i}] ${artist} - ${songTitle}`);
     });
 
-    const matchHit = songHits.find(hit =>
+    const songHit = hits.find(hit =>
       hit.type === "song" &&
-      hit.result.primary_artist.name.toLowerCase().includes(rawArtist)
+      hit.result.primary_artist.name.toLowerCase().includes(rawArtist) &&
+      hit.result.title.toLowerCase().includes(rawSong)
     );
 
-    if (!matchHit) {
-      console.warn('[No artist match found by name]');
-      return res.status(404).json({ error: 'Artist not found' });
+    if (songHit) {
+      const songId = songHit.result.id;
+      const songRes = await fetch(`https://api.genius.com/songs/${songId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const songData = await songRes.json();
+      const songUrl = songData?.response?.song?.url;
+      console.log('[Resolved via Search]', songUrl);
+      return res.status(200).json({ lyricsUrl: songUrl });
     }
 
-    const artistId = matchHit.result.primary_artist.id;
+    // Fallback: use artistMap and search songs by artist ID
+    const artistId = artistMap[rawArtist];
+    if (!artistId) {
+      console.warn('[Fallback Failed: No artistMap match]');
+      return res.status(404).json({ error: 'Lyrics not found and no fallback available' });
+    }
 
-    // Step 2: Pull songs from artist
     const artistSongsUrl = `https://api.genius.com/artists/${artistId}/songs?per_page=50&sort=title`;
     const songsRes = await fetch(artistSongsUrl, {
       headers: { Authorization: `Bearer ${accessToken}` }
@@ -57,23 +75,22 @@ module.exports = async (req, res) => {
     const songsData = await songsRes.json();
     const songs = songsData?.response?.songs || [];
 
-    console.log('[Fetched Artist Songs]', songs.map(s => s.title));
+    console.log('[Fallback Artist Songs]', songs.map(s => s.title));
 
-    // Step 3: Match against known song title pieces
     const match = songs.find(song =>
-      song.title.toLowerCase().includes("number 2") ||
-      song.title.toLowerCase().includes("never last")
+      song.title.toLowerCase().includes(rawSong)
     );
 
     if (!match) {
-      return res.status(404).json({ error: 'No matching song found from artist' });
+      console.warn('[Fallback Failed: No title match]');
+      return res.status(404).json({ error: 'Lyrics not found from artist fallback' });
     }
 
-    console.log('[Resolved Canonical URL]', match.url);
-    res.status(200).json({ lyricsUrl: match.url });
+    console.log('[Resolved via Fallback]', match.url);
+    return res.status(200).json({ lyricsUrl: match.url });
 
   } catch (err) {
     console.error("Lyrics API error:", err);
-    res.status(500).json({ error: 'Lyrics lookup failed' });
+    return res.status(500).json({ error: 'Lyrics lookup failed' });
   }
 };
