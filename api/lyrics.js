@@ -1,17 +1,15 @@
 const fetch = require('node-fetch');
-const { URLSearchParams } = require('url');
+let redis;
+try {
+  const { Redis } = require('@upstash/redis');
+  redis = new Redis({
+    url: process.env.UPSTASH_REDIS_REST_URL,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN
+  });
+} catch {
+  redis = null;
+}
 
-// Helper: Fallback artist ID map
-const artistMap = {
-  "lil tecca": 213210,
-  "yeat": 2193783,
-  "drake": 130,
-  "kendrick lamar": 1421,
-  "gunnr": 1309438,
-  "ken carson": 637082
-};
-
-// Clean and normalize a title
 function cleanTitle(title) {
   return title
     .replace(/\(.*?\)/g, '')
@@ -22,55 +20,24 @@ function cleanTitle(title) {
     .trim();
 }
 
-// Generate alternate search variations
-function generateVariants(artist, song) {
-  const variants = [];
-  if (song) {
-    variants.push(`${artist} - ${song}`);
-    variants.push(`${artist} ${song}`);
-    variants.push(`${song} ${artist}`);
-    variants.push(`${artist} ${song.split(' ')[0]}`);
+async function getArtistId(artistName) {
+  const key = `artist:${artistName}`;
+  if (redis) {
+    const cached = await redis.get(key);
+    if (cached) return cached;
   }
-  return variants;
-}
 
-// Genius search query
-async function searchGenius(query, accessToken) {
-  const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(query)}`;
-  const res = await fetch(searchUrl, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  return res.json();
-}
+  const fallbackMap = {
+    "lil tecca": 213210,
+    "yeat": 2193783,
+    "drake": 130,
+    "kendrick lamar": 1421,
+    "gunnr": 1309438,
+  };
 
-// Fetch Genius song details by ID
-async function getSongDetails(songId, accessToken) {
-  const res = await fetch(`https://api.genius.com/songs/${songId}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  const data = await res.json();
-  return data?.response?.song?.url;
-}
-
-// Fallback: Scan artist songs pages
-async function searchArtistSongs(rawArtist, rawSong, accessToken) {
-  const artistId = artistMap[rawArtist];
-  if (!artistId) return null;
-
-  for (let page = 1; page <= 3; page++) {
-    const url = `https://api.genius.com/artists/${artistId}/songs?per_page=50&sort=title&page=${page}`;
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    const data = await res.json();
-    const songs = data?.response?.songs || [];
-
-    const match = songs.find(song =>
-      song.title.toLowerCase().includes(rawSong)
-    );
-    if (match) return match.url;
-  }
-  return null;
+  const id = fallbackMap[artistName];
+  if (id && redis) await redis.set(key, id);
+  return id;
 }
 
 module.exports = async (req, res) => {
@@ -85,53 +52,89 @@ module.exports = async (req, res) => {
   if (!title) return res.status(400).json({ error: 'Missing title parameter' });
 
   const accessToken = process.env.GENIUS_ACCESS_TOKEN;
-  const cleaned = cleanTitle(title);
+  const cleanedTitle = cleanTitle(title);
+  const hasHyphen = title.includes('-');
 
   let rawArtist = '', rawSong = '';
-  if (cleaned.includes('-')) {
-    [rawArtist, rawSong] = cleaned.split('-').map(p => p.trim().toLowerCase());
+  if (hasHyphen) {
+    [rawArtist, rawSong] = title.split('-').map(p => p.trim().toLowerCase());
   } else {
-    rawArtist = cleaned.toLowerCase();
+    rawArtist = cleanedTitle.toLowerCase();
   }
 
   console.log('[Cleaned]', { rawArtist, rawSong });
 
+  const searchVariants = hasHyphen
+    ? [cleanedTitle, `${rawArtist} ${rawSong}`]
+    : [cleanedTitle];
+
   try {
-    const queries = generateVariants(rawArtist, rawSong || '');
-    for (const q of queries) {
-      const data = await searchGenius(q, accessToken);
-      const hits = data?.response?.hits || [];
+    for (const variant of searchVariants) {
+      const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(variant)}&t=${Date.now()}`;
+      const searchRes = await fetch(searchUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      const searchData = await searchRes.json();
+      const hits = searchData?.response?.hits || [];
+
       const songHits = hits.filter(hit =>
         hit.type === "song" &&
         hit.index === "song" &&
-        !/translations|traducciones|перевод|переклад/i.test(hit.result.primary_artist.name)
+        !/translations|traducciones|traducao|перевод|переклад/i.test(hit.result.primary_artist.name)
       );
 
+      console.log('[Filtered Song Hits]');
+      songHits.forEach((hit, i) => {
+        const artist = hit.result.primary_artist.name;
+        const songTitle = hit.result.title;
+        console.log(`[${i}] ${artist} - ${songTitle}`);
+      });
+
       const match = songHits.find(hit =>
-        hit.result.primary_artist.name.toLowerCase().includes(rawArtist) &&
-        hit.result.title.toLowerCase().includes(rawSong)
+        (rawSong && hit.result.primary_artist.name.toLowerCase().includes(rawArtist) &&
+          hit.result.title.toLowerCase().includes(rawSong)) ||
+        (!rawSong && cleanedTitle.toLowerCase().includes(hit.result.title.toLowerCase()))
       );
 
       if (match) {
-        const songUrl = await getSongDetails(match.result.id, accessToken);
-        if (songUrl) {
-          console.log('[Resolved via Variant Search]', songUrl);
-          return res.status(200).json({ lyricsUrl: songUrl });
-        }
+        const songId = match.result.id;
+        const songData = await (await fetch(`https://api.genius.com/songs/${songId}`, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        })).json();
+
+        const url = songData?.response?.song?.url;
+        console.log('[Resolved via Filtered Search]', url);
+        return res.status(200).json({ lyricsUrl: url });
       }
     }
 
-    // Fallback: scan artist pages
-    const fallbackUrl = await searchArtistSongs(rawArtist, rawSong, accessToken);
-    if (fallbackUrl) {
-      console.log('[Resolved via Fallback]', fallbackUrl);
-      return res.status(200).json({ lyricsUrl: fallbackUrl });
+    const artistId = await getArtistId(rawArtist);
+    if (!artistId) {
+      console.warn('[Fallback Failed: No artist ID found]');
+      return res.status(404).json({ error: 'Lyrics not found and no fallback available' });
     }
 
-    console.warn('[Failed to resolve any match]');
-    return res.status(404).json({ error: 'Lyrics not found from all methods' });
+    const artistSongsUrl = `https://api.genius.com/artists/${artistId}/songs?per_page=50&sort=title`;
+    const songsRes = await fetch(artistSongsUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    const songsData = await songsRes.json();
+    const songs = songsData?.response?.songs || [];
+
+    const fallbackMatch = songs.find(song =>
+      rawSong && song.title.toLowerCase().includes(rawSong)
+    );
+
+    if (!fallbackMatch) {
+      console.warn('[Fallback Failed: No title match]');
+      return res.status(404).json({ error: 'Lyrics not found from artist fallback' });
+    }
+
+    console.log('[Resolved via Fallback]', fallbackMatch.url);
+    return res.status(200).json({ lyricsUrl: fallbackMatch.url });
+
   } catch (err) {
-    console.error('Lyrics API error:', err);
+    console.error("Lyrics API error:", err);
     return res.status(500).json({ error: 'Lyrics lookup failed' });
   }
 };
