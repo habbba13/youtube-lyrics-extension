@@ -28,6 +28,8 @@ module.exports = async (req, res) => {
   const cleanedTitle = cleanTitle(title);
   const [rawArtist, rawSong] = cleanedTitle.split("-").map(part => part.trim().toLowerCase());
 
+  console.log('[Cleaned]', { rawArtist, rawSong });
+
   try {
     // Try full search first to get the song ID
     const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(cleanedTitle)}`;
@@ -37,15 +39,16 @@ module.exports = async (req, res) => {
     const searchData = await searchRes.json();
     const hits = searchData?.response?.hits || [];
 
-    console.log('[Search Hits]');
-    hits.forEach((hit, i) => {
+    const songHitsOnly = hits.filter(hit => hit.type === "song" && hit.index === "song");
+
+    console.log('[Filtered Song Hits]');
+    songHitsOnly.forEach((hit, i) => {
       const artist = hit.result.primary_artist.name;
       const songTitle = hit.result.title;
       console.log(`[${i}] ${artist} - ${songTitle}`);
     });
 
-    const songHit = hits.find(hit =>
-      hit.type === "song" &&
+    const songHit = songHitsOnly.find(hit =>
       hit.result.primary_artist.name.toLowerCase().includes(rawArtist) &&
       hit.result.title.toLowerCase().includes(rawSong)
     );
@@ -57,7 +60,7 @@ module.exports = async (req, res) => {
       });
       const songData = await songRes.json();
       const songUrl = songData?.response?.song?.url;
-      console.log('[Resolved via Search]', songUrl);
+      console.log('[Resolved via Filtered Search]', songUrl);
       return res.status(200).json({ lyricsUrl: songUrl });
     }
 
