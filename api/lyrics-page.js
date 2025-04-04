@@ -39,7 +39,11 @@ module.exports = async (req, res) => {
       .split('\n')
       .map(line => line.trim())
       .filter(line => line && !/contributors|translations|avatars|lyrics/i.test(line))
-      .join('\n');
+      .join('\n')
+      .replace(/\n\(/g, ' (') // Move lone opening parentheses to the end of previous line
+      .replace(/\)\n/g, ') ') // Move lone closing parentheses to the start of next line
+      .replace(/\s{2,}/g, ' ') // Clean up extra spacing
+      .trim();
 
     if (!lyrics) {
       lyrics = $('.lyrics').text().trim();
