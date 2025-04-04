@@ -11,6 +11,7 @@ module.exports = async (req, res) => {
 
   const accessToken = process.env.GENIUS_ACCESS_TOKEN;
 
+  // Clean raw input
   const cleanedTitle = title
     .replace(/\(.*?\)/g, "")
     .replace(/\[.*?\]/g, "")
@@ -20,6 +21,8 @@ module.exports = async (req, res) => {
     .trim();
 
   const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(cleanedTitle)}`;
+  const searchArtist = title.split("-")[0].toLowerCase().trim();
+  const searchTitle = title.split("-")[1]?.toLowerCase().trim() || "";
 
   try {
     const searchRes = await fetch(searchUrl, {
@@ -33,12 +36,22 @@ module.exports = async (req, res) => {
     console.log('[Filtered Genius Song Hits]', hits.map(h => h.result.full_title));
 
     if (!hits.length) {
-      return res.status(404).json({ error: 'No song results from Genius' });
+      return res.status(404).json({ error: 'No valid song hits from Genius' });
     }
 
-    const firstSong = hits[0].result;
+    // Fuzzy match artist + song title
+    const strongMatch = hits.find(hit => {
+      const titleText = hit.result.title_with_featured.toLowerCase();
+      const artistText = hit.result.primary_artist.name.toLowerCase();
+      return (
+        titleText.includes(searchTitle) &&
+        (artistText.includes(searchArtist) || titleText.includes(searchArtist))
+      );
+    });
 
-    const songId = firstSong.id;
+    const finalResult = strongMatch || hits[0];
+    const songId = finalResult.result.id;
+
     const songRes = await fetch(`https://api.genius.com/songs/${songId}`, {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
@@ -47,13 +60,13 @@ module.exports = async (req, res) => {
     const canonicalUrl = songData?.response?.song?.url;
 
     if (!canonicalUrl) {
-      return res.status(404).json({ error: 'Could not resolve canonical song URL' });
+      return res.status(404).json({ error: 'No canonical URL found' });
     }
 
     console.log('[Resolved Canonical URL]', canonicalUrl);
     res.status(200).json({ lyricsUrl: canonicalUrl });
   } catch (err) {
-    console.error("Genius API error:", err);
-    res.status(500).json({ error: 'Failed to retrieve Genius lyrics URL' });
+    console.error("Lyrics fetch error:", err);
+    res.status(500).json({ error: 'Server error fetching lyrics' });
   }
 };
