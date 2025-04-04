@@ -1,5 +1,5 @@
 const fetch = require('node-fetch');
-const { Redis } = require('@upstash/redis');
+const Redis = require('@upstash/redis');
 
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL,
@@ -8,10 +8,10 @@ const redis = new Redis({
 
 function cleanTitle(title) {
   return title
-    .replace(/\(.*?\)/g, '')
-    .replace(/\[.*?\]/g, '')
-    .replace(/\s*\/\s*/g, ' ')
-    .replace(/[-_]+/g, ' ')
+    .replace(/\(.*?\)/g, '')           // remove parentheses
+    .replace(/\[.*?\]/g, '')           // remove brackets
+    .replace(/\s*\/\s*/g, ' ')         // remove slashes
+    .replace(/[_]+/g, ' ')             // keep dashes, only remove underscores
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
@@ -30,10 +30,7 @@ async function getArtistId(artistName) {
   };
 
   const id = fallbackMap[artistName];
-  if (id) {
-    await redis.set(key, id);
-  }
-
+  if (id) await redis.set(key, id);
   return id;
 }
 
@@ -43,9 +40,7 @@ module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Cache-Control", "no-store");
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
 
   const { title } = req.query;
   if (!title) return res.status(400).json({ error: 'Missing title parameter' });
@@ -83,11 +78,11 @@ module.exports = async (req, res) => {
       console.log(`[${i}] ${artist} - ${songTitle}`);
     });
 
-    const songHit = songHitsOnly.find(hit => {
-      const artistMatch = hit.result.primary_artist.name.toLowerCase().includes(rawArtist);
-      const songMatch = rawSong ? hit.result.title.toLowerCase().includes(rawSong) : true;
-      return artistMatch && songMatch;
-    });
+    const songHit = songHitsOnly.find(hit =>
+      rawSong &&
+      hit.result.primary_artist.name.toLowerCase().includes(rawArtist) &&
+      hit.result.title.toLowerCase().includes(rawSong)
+    );
 
     if (songHit) {
       const songId = songHit.result.id;
@@ -100,6 +95,7 @@ module.exports = async (req, res) => {
       return res.status(200).json({ lyricsUrl: songUrl });
     }
 
+    // fallback search by artist ID
     const artistId = await getArtistId(rawArtist);
     if (!artistId) {
       console.warn('[Fallback Failed: No artist ID found]');
@@ -132,4 +128,3 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: 'Lyrics lookup failed' });
   }
 };
-
