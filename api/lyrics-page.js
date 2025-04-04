@@ -35,14 +35,27 @@ module.exports = async (req, res) => {
       .get()
       .join('\n');
 
+    // Smart line cleanup
     lyrics = lyrics
       .split('\n')
       .map(line => line.trim())
-      .filter(line => line && !/contributors|translations|avatars|lyrics/i.test(line))
+      .filter(line => line && !/contributors|translations|avatars|lyrics/i.test(line));
+
+    // Merge lonely brackets with neighboring lines
+    for (let i = 1; i < lyrics.length; i++) {
+      if (lyrics[i] === ')' && i > 0) {
+        lyrics[i - 1] += ')';
+        lyrics[i] = '';
+      } else if (lyrics[i] === '(' && i < lyrics.length - 1) {
+        lyrics[i + 1] = '(' + lyrics[i + 1];
+        lyrics[i] = '';
+      }
+    }
+
+    lyrics = lyrics
+      .filter(Boolean)
       .join('\n')
-      .replace(/\n\(/g, ' (') // Move lone opening parentheses to the end of previous line
-      .replace(/\)\n/g, ') ') // Move lone closing parentheses to the start of next line
-      .replace(/\s{2,}/g, ' ') // Clean up extra spacing
+      .replace(/\s{2,}/g, ' ')
       .trim();
 
     if (!lyrics) {
