@@ -5,7 +5,8 @@ const artistMap = {
   "lil tecca": 213210,
   "yeat": 2193783,
   "drake": 130,
-  "kendrick lamar": 1421
+  "kendrick lamar": 1421,
+  "gunnr": 1309438
 };
 
 function cleanTitle(title) {
@@ -26,19 +27,19 @@ module.exports = async (req, res) => {
   if (!title) return res.status(400).json({ error: 'Missing title parameter' });
 
   const accessToken = process.env.GENIUS_ACCESS_TOKEN;
-  const cleanedTitle = cleanTitle(title);
 
   let rawArtist = '', rawSong = '';
-  if (cleanedTitle.includes('-')) {
-    [rawArtist, rawSong] = cleanedTitle.split('-').map(p => p.trim().toLowerCase());
+  if (title.includes('-')) {
+    [rawArtist, rawSong] = title.split('-').map(p => cleanTitle(p.toLowerCase()));
   } else {
-    rawArtist = cleanedTitle.toLowerCase();
+    rawArtist = cleanTitle(title.toLowerCase());
   }
 
   console.log('[Cleaned]', { rawArtist, rawSong });
 
   try {
-    const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(cleanedTitle)}&t=${Date.now()}`;
+    const cleanedSearch = cleanTitle(title);
+    const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(cleanedSearch)}&t=${Date.now()}`;
     const searchRes = await fetch(searchUrl, {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
@@ -54,11 +55,17 @@ module.exports = async (req, res) => {
       console.log(`[${i}] ${artist} - ${songTitle}`);
     });
 
-    const songHit = songHitsOnly.find(hit =>
+    let songHit = songHitsOnly.find(hit =>
       rawSong &&
       hit.result.primary_artist.name.toLowerCase().includes(rawArtist) &&
       hit.result.title.toLowerCase().includes(rawSong)
     );
+
+    // fallback to top hit if no match and no rawSong
+    if (!songHit && songHitsOnly.length > 0 && !rawSong) {
+      songHit = songHitsOnly[0];
+      console.log('[Fallback to Top Hit]', songHit.result.full_title);
+    }
 
     if (songHit) {
       const songId = songHit.result.id;
@@ -67,11 +74,10 @@ module.exports = async (req, res) => {
       });
       const songData = await songRes.json();
       const songUrl = songData?.response?.song?.url;
-      console.log('[Resolved via Filtered Search]', songUrl);
+      console.log('[Resolved]', songUrl);
       return res.status(200).json({ lyricsUrl: songUrl });
     }
 
-    // Fallback if artistMap has an entry
     const artistId = artistMap[rawArtist];
     if (!artistId) {
       console.warn('[Fallback Failed: No artistMap match]');
