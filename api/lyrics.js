@@ -22,32 +22,33 @@ module.exports = async (req, res) => {
   const [rawArtist, rawSong] = cleanedTitle.split("-").map(part => part.trim().toLowerCase());
 
   try {
-    // Step 1: Search artist
+    // Step 1: Search artist through song hits
     const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(rawArtist)}`;
     const searchRes = await fetch(searchUrl, {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
     const searchData = await searchRes.json();
 
-    const artistHit = searchData.response.hits.find(hit =>
+    const songHits = searchData?.response?.hits || [];
+    const matchHit = songHits.find(hit =>
       hit.type === "song" &&
       hit.result.primary_artist.name.toLowerCase().includes(rawArtist)
     );
 
-    if (!artistHit) {
-      console.warn('[No artist match found in Genius search]');
-      return res.status(404).json({ error: 'Artist not found' });
+    if (!matchHit) {
+      console.warn('[No artist match found in Genius search hits]');
+      return res.status(404).json({ error: 'Artist not found from hits' });
     }
 
-    const artistId = artistHit.result.primary_artist.id;
+    const artistId = matchHit.result.primary_artist.id;
 
-    // Step 2: Fetch songs by artist
+    // Step 2: Get all songs from that artist
     const artistSongsUrl = `https://api.genius.com/artists/${artistId}/songs?per_page=50&sort=title`;
     const songsRes = await fetch(artistSongsUrl, {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
     const songsData = await songsRes.json();
-    const songs = songsData.response.songs || [];
+    const songs = songsData?.response?.songs || [];
 
     console.log('[Artist Songs]', songs.map(s => s.title));
 
