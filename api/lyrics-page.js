@@ -11,6 +11,14 @@ const fetchWithTimeout = (url, options = {}, timeout = 10000) =>
 
 async function tryFetchLyrics(scraperUrl) {
   const response = await fetchWithTimeout(scraperUrl);
+
+  // Guard: ScraperAPI may return HTML error page with 504/403/etc.
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('[ScraperAPI Non-OK Response]', response.status, errorText.slice(0, 100));
+    throw new Error(`ScraperAPI request failed with status ${response.status}`);
+  }
+
   const html = await response.text();
   const $ = cheerio.load(html);
 
@@ -65,6 +73,6 @@ module.exports = async (req, res) => {
     return res.status(200).json({ lyrics });
   } catch (err) {
     console.error('[ScraperAPI Error]', err.message);
-    return res.status(500).json({ error: 'Failed to scrape lyrics from Genius' });
+    return res.status(500).json({ error: err.message || 'Failed to scrape lyrics from Genius' });
   }
 };
