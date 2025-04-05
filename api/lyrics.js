@@ -8,7 +8,7 @@ function cleanTitle(title) {
     .replace(/\(.*?\)/g, '')
     .replace(/\[.*?\]/g, '')
     .replace(/\s*\/\s*/g, ' ')
-    .replace(/[-_]+/g, ' ')
+    // .replace(/[-_]+/g, ' ')     // ❌ don't remove dashes here
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
