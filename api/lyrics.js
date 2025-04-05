@@ -45,11 +45,16 @@ module.exports = async (req, res) => {
   const accessToken = process.env.GENIUS_ACCESS_TOKEN;
   const cleanedTitle = cleanTitle(title);
 
+
+  
   let rawArtist = '', rawSong = '';
-  if (cleanedTitle.includes('-')) {
-    [rawArtist, rawSong] = cleanedTitle.split('-').map(p => p.trim().toLowerCase());
+  const parts = cleanedTitle.split('-').map(p => p.trim().toLowerCase());
+
+  if (parts.length >= 2) {
+    rawArtist = parts[0];
+    rawSong = parts.slice(1).join(' ');
   } else {
-    rawArtist = cleanedTitle.toLowerCase();
+  rawArtist = cleanedTitle.toLowerCase();
   }
 
   console.log('[Cleaned]', { rawArtist, rawSong });
