@@ -8,17 +8,13 @@ function cleanTitle(title) {
     .replace(/\(.*?\)/g, '')
     .replace(/\[.*?\]/g, '')
     .replace(/\s*\/\s*/g, ' ')
-    // .replace(/[-_]+/g, ' ') // we keep dashes!
+    // .replace(/[-_]+/g, ' ')  // keep dashes
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
 
-// Removes common suffixes from channel names like “Yeat Music”
-function stripSuffixes(name) {
-  const stopwords = ['music', 'tv', 'channel', 'media', 'records'];
-  const words = name.toLowerCase().split(' ');
-  const filtered = words.filter(word => !stopwords.includes(word));
-  return filtered.join(' ').trim();
+function stripDiacritics(text) {
+  return text.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
 }
 
 async function getArtistId(artistName) {
@@ -53,15 +49,14 @@ module.exports = async (req, res) => {
   const accessToken = process.env.GENIUS_ACCESS_TOKEN;
   const cleanedTitle = cleanTitle(title);
 
-    let rawArtist = '', rawSong = '';
-  const parts = cleanedTitle.split('-').map(p => p.trim().toLowerCase());
+  let rawArtist = '', rawSong = '';
+  const parts = cleanedTitle.split('-').map(p => p.trim());
 
   if (parts.length >= 2) {
     rawArtist = parts[0];
     rawSong = parts.slice(1).join(' ');
   } else {
-    // Smarter fallback if no dash is present
-    const words = cleanedTitle.toLowerCase().split(' ');
+    const words = cleanedTitle.split(' ');
     if (words.length >= 3) {
       rawArtist = words.slice(0, 2).join(' ');
       rawSong = words.slice(2).join(' ');
@@ -69,16 +64,13 @@ module.exports = async (req, res) => {
       rawArtist = words[0];
       rawSong = words[1];
     } else {
-      rawArtist = cleanedTitle.toLowerCase();
+      rawArtist = cleanedTitle;
       rawSong = '';
     }
   }
 
-  // ✅ Clean common suffixes in artist name
-  rawArtist = rawArtist
-    .replace(/\bmusic\b|\bofficial\b|\bvevo\b/g, '')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
+  rawArtist = stripDiacritics(rawArtist.toLowerCase());
+  rawSong = stripDiacritics(rawSong.toLowerCase());
 
   console.log('[Cleaned]', { rawArtist, rawSong });
 
@@ -105,12 +97,11 @@ module.exports = async (req, res) => {
 
     const bestMatch = songHits.find(hit =>
       rawSong &&
-      hit.result.primary_artist.name.toLowerCase().includes(rawArtist) &&
-      hit.result.title.toLowerCase().includes(rawSong)
+      stripDiacritics(hit.result.primary_artist.name.toLowerCase()).includes(rawArtist) &&
+      stripDiacritics(hit.result.title.toLowerCase()).includes(rawSong)
     ) || songHits[0];
 
     if (bestMatch) {
-      const songId = bestMatch.result.id;
       const songUrl = bestMatch.result.url;
       console.log('[Resolved]', songUrl);
       return res.status(200).json({ lyricsUrl: songUrl });
