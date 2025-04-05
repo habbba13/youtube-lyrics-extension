@@ -53,27 +53,32 @@ module.exports = async (req, res) => {
   const accessToken = process.env.GENIUS_ACCESS_TOKEN;
   const cleanedTitle = cleanTitle(title);
 
-  let rawArtist = '', rawSong = '';
+    let rawArtist = '', rawSong = '';
   const parts = cleanedTitle.split('-').map(p => p.trim().toLowerCase());
 
   if (parts.length >= 2) {
     rawArtist = parts[0];
     rawSong = parts.slice(1).join(' ');
   } else {
-    // Fallback: try to infer artist/song without dash
+    // Smarter fallback if no dash is present
     const words = cleanedTitle.toLowerCase().split(' ');
-
     if (words.length >= 3) {
-      rawArtist = stripSuffixes(words.slice(0, 2).join(' '));
+      rawArtist = words.slice(0, 2).join(' ');
       rawSong = words.slice(2).join(' ');
     } else if (words.length === 2) {
-      rawArtist = stripSuffixes(words[0]);
+      rawArtist = words[0];
       rawSong = words[1];
     } else {
-      rawArtist = stripSuffixes(cleanedTitle.toLowerCase());
+      rawArtist = cleanedTitle.toLowerCase();
       rawSong = '';
     }
   }
+
+  // ✅ Clean common suffixes in artist name
+  rawArtist = rawArtist
+    .replace(/\bmusic\b|\bofficial\b|\bvevo\b/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 
   console.log('[Cleaned]', { rawArtist, rawSong });
 
