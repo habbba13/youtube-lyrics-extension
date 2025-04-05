@@ -1,20 +1,22 @@
 const fetch = require('node-fetch');
 const Redis = require('@upstash/redis');
-
 const redis = Redis.Redis.fromEnv();
 
 function cleanTitle(title) {
   return title
-    .replace(/\(.*?\)/g, '')
-    .replace(/\[.*?\]/g, '')
-    .replace(/\s*\/\s*/g, ' ')
-    // .replace(/[-_]+/g, ' ')  // keep dashes
-    .replace(/\s{2,}/g, ' ')
+    .replace(/\(.*?\)/g, '') // remove (comments)
+    .replace(/\[.*?\]/g, '') // remove [tags]
+    .replace(/\s*\/\s*/g, ' ') // replace slashes with space
+    .replace(/\s{2,}/g, ' ') // remove double spaces
     .trim();
 }
 
-function stripDiacritics(text) {
-  return text.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+function simplifyChannelName(name) {
+  return name
+    .replace(/\b(music|official|tv|channel|records|videos|entertainment)\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+    .toLowerCase();
 }
 
 async function getArtistId(artistName) {
@@ -50,13 +52,14 @@ module.exports = async (req, res) => {
   const cleanedTitle = cleanTitle(title);
 
   let rawArtist = '', rawSong = '';
-  const parts = cleanedTitle.split('-').map(p => p.trim());
+  const parts = cleanedTitle.split('-').map(p => p.trim().toLowerCase());
 
   if (parts.length >= 2) {
     rawArtist = parts[0];
     rawSong = parts.slice(1).join(' ');
   } else {
-    const words = cleanedTitle.split(' ');
+    // fallback guess
+    const words = cleanedTitle.toLowerCase().split(' ');
     if (words.length >= 3) {
       rawArtist = words.slice(0, 2).join(' ');
       rawSong = words.slice(2).join(' ');
@@ -64,18 +67,23 @@ module.exports = async (req, res) => {
       rawArtist = words[0];
       rawSong = words[1];
     } else {
-      rawArtist = cleanedTitle;
+      rawArtist = cleanedTitle.toLowerCase();
       rawSong = '';
     }
-  }
 
-  rawArtist = stripDiacritics(rawArtist.toLowerCase());
-  rawSong = stripDiacritics(rawSong.toLowerCase());
+    // attempt to extract from YouTube channel name (if provided in query)
+    if (req.query.channelName) {
+      const channelRaw = simplifyChannelName(req.query.channelName);
+      if (channelRaw && !rawArtist.includes(channelRaw)) {
+        rawArtist = channelRaw;
+      }
+    }
+  }
 
   console.log('[Cleaned]', { rawArtist, rawSong });
 
   try {
-    const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(cleanedTitle)}`;
+    const searchUrl = `https://api.genius.com/search?q=${encodeURIComponent(`${rawArtist} ${rawSong}`)}`;
     const searchRes = await fetch(searchUrl, {
       headers: { Authorization: `Bearer ${accessToken}` }
     });
@@ -95,19 +103,17 @@ module.exports = async (req, res) => {
       console.log(`[${i}] ${artist} - ${songTitle}`);
     });
 
-    const bestMatch = songHits.find(hit => {
-      const artist = stripDiacritics(hit.result.primary_artist.name.toLowerCase());
-      const title = stripDiacritics(hit.result.title.toLowerCase());
-      return artist.includes(stripDiacritics(rawArtist)) && title.includes(stripDiacritics(rawSong));
-    }) || songHits.find(hit => {
-      const artist = stripDiacritics(hit.result.primary_artist.name.toLowerCase());
-      return artist.includes(stripDiacritics(rawArtist));
-    });
+    const bestMatch = songHits.find(hit =>
+      rawSong &&
+      hit.result.primary_artist.name.toLowerCase().includes(rawArtist) &&
+      hit.result.title.toLowerCase().includes(rawSong)
+    ) || songHits[0];
 
     if (bestMatch) {
+      const songId = bestMatch.result.id;
       const songUrl = bestMatch.result.url;
       console.log('[Resolved]', songUrl);
-      return res.status(200).json({ lyricsUrl: songUrl });
+      return res.status(200).json({ lyricsUrl: songUrl, songId });
     }
 
     console.warn('[Fallback Failed: No match]');
@@ -118,4 +124,3 @@ module.exports = async (req, res) => {
     return res.status(500).json({ error: 'Lyrics lookup failed' });
   }
 };
-
