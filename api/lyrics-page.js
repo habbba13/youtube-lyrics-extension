@@ -1,5 +1,4 @@
 const fetch = require('node-fetch');
-const cheerio = require('cheerio');
 
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -9,78 +8,54 @@ module.exports = async (req, res) => {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const { url } = req.query;
-  console.log('[Scraping]', url);
+  const { songId } = req.query;
+  const accessToken = process.env.GENIUS_ACCESS_TOKEN;
 
-  if (!url) return res.status(400).json({ error: 'Missing Genius URL' });
-
-  const apiKey = process.env.SCRAPER_API_KEY;
-  const scraperUrl = `http://api.scraperapi.com?api_key=${apiKey}&url=${encodeURIComponent(url)}&render=false`;
-
-  async function tryFetchLyrics() {
-    const response = await fetch(scraperUrl, { timeout: 7000 });
-    if (!response.ok) throw new Error(`ScraperAPI response not ok: ${response.status}`);
-    const html = await response.text();
-    const $ = cheerio.load(html);
-
-    const lyricsContainers = $('[data-lyrics-container]');
-    let lyrics = lyricsContainers
-      .map((_, el) => {
-        return $(el)
-          .contents()
-          .map((_, child) => $(child).text())
-          .get()
-          .join('\n');
-      })
-      .get()
-      .join('\n');
-
-    // Smart line cleanup
-    lyrics = lyrics
-      .split('\n')
-      .map(line => line.trim())
-      .filter(line => line && !/contributors|translations|avatars|lyrics/i.test(line));
-
-    // Merge lonely brackets with neighboring lines
-    for (let i = 1; i < lyrics.length; i++) {
-      if (lyrics[i] === ')' && i > 0) {
-        lyrics[i - 1] += ')';
-        lyrics[i] = '';
-      } else if (lyrics[i] === '(' && i < lyrics.length - 1) {
-        lyrics[i + 1] = '(' + lyrics[i + 1];
-        lyrics[i] = '';
-      }
-    }
-
-    lyrics = lyrics
-      .filter(Boolean)
-      .join('\n')
-      .replace(/\s{2,}/g, ' ')
-      .trim();
-
-    if (!lyrics) {
-      lyrics = $('.lyrics').text().trim();
-    }
-
-    return lyrics || null;
+  if (!songId) {
+    return res.status(400).json({ error: 'Missing Genius song ID' });
   }
 
   try {
-    let lyrics = await tryFetchLyrics();
+    const songRes = await fetch(`https://api.genius.com/songs/${songId}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    });
 
-    if (!lyrics) {
-      console.warn('[Retrying fetch]');
-      lyrics = await tryFetchLyrics();
+    if (!songRes.ok) {
+      throw new Error(`Genius API responded with ${songRes.status}`);
     }
 
+    const songData = await songRes.json();
+    const embedHtml = songData?.response?.song?.embed_content || '';
+
+    const lyrics = extractLyricsFromEmbed(embedHtml);
+
     if (!lyrics) {
-      console.warn('[No Lyrics Found]');
-      return res.status(404).json({ error: 'Lyrics not found on page' });
+      return res.status(404).json({ error: 'Lyrics not found in embed' });
     }
 
     return res.status(200).json({ lyrics });
   } catch (err) {
-    console.error('[ScraperAPI Error]', err.message);
-    return res.status(500).json({ error: 'Failed to scrape lyrics with ScraperAPI' });
+    console.error('[Genius API Error]', err.message);
+    return res.status(500).json({ error: 'Failed to get lyrics from Genius API' });
   }
 };
+
+function extractLyricsFromEmbed(embedHtml) {
+  if (!embedHtml) return null;
+
+  // Convert HTML entities and tags to plain text
+  const decoded = embedHtml
+    .replace(/<[^>]+>/g, '') // strip tags
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s{2,}/g, ' ') // collapse spacing
+    .trim();
+
+  return decoded || null;
+}
+
