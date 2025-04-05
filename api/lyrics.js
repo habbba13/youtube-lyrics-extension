@@ -51,20 +51,21 @@ module.exports = async (req, res) => {
 const parts = cleanedTitle.split('-').map(p => p.trim().toLowerCase());
 
 if (parts.length >= 2) {
-  rawArtist = parts[0];
-  rawSong = parts.slice(1).join(' ');
+  rawArtist = parts[0];                          // If there's a dash (Yeat - TURNMEUP), take the left side as artist
+  rawSong = parts.slice(1).join(' ');           // Everything after the dash is treated as song title
 } else {
   // Smarter fallback if no dash is present
-  const words = cleanedTitle.toLowerCase().split(' ');
+  const words = cleanedTitle.toLowerCase().split(' ');   // Break title into individual words
+
   if (words.length >= 3) {
-    rawArtist = words.slice(0, 2).join(' ');
-    rawSong = words.slice(2).join(' ');
+    rawArtist = words.slice(0, 2).join(' ');     // If at least 3 words, assume artist is first 2 words
+    rawSong = words.slice(2).join(' ');          // Rest is song name
   } else if (words.length === 2) {
-    rawArtist = words[0];
-    rawSong = words[1];
+    rawArtist = words[0];                        // If 2 words, treat first as artist
+    rawSong = words[1];                          // and second as song title
   } else {
-    rawArtist = cleanedTitle.toLowerCase(); // best effort
-    rawSong = ''; // no song detected
+    rawArtist = cleanedTitle.toLowerCase();      // If only 1 word, fallback to using whole thing as artist
+    rawSong = '';                                // No song title detected
   }
 }
 
