@@ -8,9 +8,17 @@ function cleanTitle(title) {
     .replace(/\(.*?\)/g, '')
     .replace(/\[.*?\]/g, '')
     .replace(/\s*\/\s*/g, ' ')
-    // .replace(/[-_]+/g, ' ')     // ❌ don't remove dashes here
+    // .replace(/[-_]+/g, ' ') // we keep dashes!
     .replace(/\s{2,}/g, ' ')
     .trim();
+}
+
+// Removes common suffixes from channel names like “Yeat Music”
+function stripSuffixes(name) {
+  const stopwords = ['music', 'tv', 'channel', 'media', 'records'];
+  const words = name.toLowerCase().split(' ');
+  const filtered = words.filter(word => !stopwords.includes(word));
+  return filtered.join(' ').trim();
 }
 
 async function getArtistId(artistName) {
@@ -45,29 +53,27 @@ module.exports = async (req, res) => {
   const accessToken = process.env.GENIUS_ACCESS_TOKEN;
   const cleanedTitle = cleanTitle(title);
 
-
-  
   let rawArtist = '', rawSong = '';
-const parts = cleanedTitle.split('-').map(p => p.trim().toLowerCase());
+  const parts = cleanedTitle.split('-').map(p => p.trim().toLowerCase());
 
-if (parts.length >= 2) {
-  rawArtist = parts[0];                          // If there's a dash (Yeat - TURNMEUP), take the left side as artist
-  rawSong = parts.slice(1).join(' ');           // Everything after the dash is treated as song title
-} else {
-  // Smarter fallback if no dash is present
-  const words = cleanedTitle.toLowerCase().split(' ');   // Break title into individual words
-
-  if (words.length >= 3) {
-    rawArtist = words.slice(0, 2).join(' ');     // If at least 3 words, assume artist is first 2 words
-    rawSong = words.slice(2).join(' ');          // Rest is song name
-  } else if (words.length === 2) {
-    rawArtist = words[0];                        // If 2 words, treat first as artist
-    rawSong = words[1];                          // and second as song title
+  if (parts.length >= 2) {
+    rawArtist = parts[0];
+    rawSong = parts.slice(1).join(' ');
   } else {
-    rawArtist = cleanedTitle.toLowerCase();      // If only 1 word, fallback to using whole thing as artist
-    rawSong = '';                                // No song title detected
+    // Fallback: try to infer artist/song without dash
+    const words = cleanedTitle.toLowerCase().split(' ');
+
+    if (words.length >= 3) {
+      rawArtist = stripSuffixes(words.slice(0, 2).join(' '));
+      rawSong = words.slice(2).join(' ');
+    } else if (words.length === 2) {
+      rawArtist = stripSuffixes(words[0]);
+      rawSong = words[1];
+    } else {
+      rawArtist = stripSuffixes(cleanedTitle.toLowerCase());
+      rawSong = '';
+    }
   }
-}
 
   console.log('[Cleaned]', { rawArtist, rawSong });
 
@@ -113,4 +119,3 @@ if (parts.length >= 2) {
     return res.status(500).json({ error: 'Lyrics lookup failed' });
   }
 };
-
