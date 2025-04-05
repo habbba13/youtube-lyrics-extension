@@ -16,12 +16,19 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const songRes = await fetch(`https://api.genius.com/songs/${songId}`, {
+    const response = await fetch(`https://api.genius.com/songs/${songId}`, {
       headers: {
         Authorization: `Bearer ${accessToken}`
       }
     });
 
+    const data = await response.json();
+    const lyrics = data?.response?.song?.lyrics?.plain;
+    
+    if (!lyrics) {
+      return res.status(404).json({ error: 'Lyrics not found in Genius API' });
+    }
+    
     if (!songRes.ok) {
       throw new Error(`Genius API responded with ${songRes.status}`);
     }
