@@ -95,11 +95,14 @@ module.exports = async (req, res) => {
       console.log(`[${i}] ${artist} - ${songTitle}`);
     });
 
-    const bestMatch = songHits.find(hit =>
-      rawSong &&
-      stripDiacritics(hit.result.primary_artist.name.toLowerCase()).includes(rawArtist) &&
-      stripDiacritics(hit.result.title.toLowerCase()).includes(rawSong)
-    ) || songHits[0];
+    const bestMatch = songHits.find(hit => {
+      const artist = stripDiacritics(hit.result.primary_artist.name.toLowerCase());
+      const title = stripDiacritics(hit.result.title.toLowerCase());
+      return artist.includes(stripDiacritics(rawArtist)) && title.includes(stripDiacritics(rawSong));
+    }) || songHits.find(hit => {
+      const artist = stripDiacritics(hit.result.primary_artist.name.toLowerCase());
+      return artist.includes(stripDiacritics(rawArtist));
+    });
 
     if (bestMatch) {
       const songUrl = bestMatch.result.url;
