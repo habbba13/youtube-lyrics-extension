@@ -48,14 +48,25 @@ module.exports = async (req, res) => {
 
   
   let rawArtist = '', rawSong = '';
-  const parts = cleanedTitle.split('-').map(p => p.trim().toLowerCase());
+const parts = cleanedTitle.split('-').map(p => p.trim().toLowerCase());
 
-  if (parts.length >= 2) {
-    rawArtist = parts[0];
-    rawSong = parts.slice(1).join(' ');
+if (parts.length >= 2) {
+  rawArtist = parts[0];
+  rawSong = parts.slice(1).join(' ');
+} else {
+  // Smarter fallback if no dash is present
+  const words = cleanedTitle.toLowerCase().split(' ');
+  if (words.length >= 3) {
+    rawArtist = words.slice(0, 2).join(' ');
+    rawSong = words.slice(2).join(' ');
+  } else if (words.length === 2) {
+    rawArtist = words[0];
+    rawSong = words[1];
   } else {
-  rawArtist = cleanedTitle.toLowerCase();
+    rawArtist = cleanedTitle.toLowerCase(); // best effort
+    rawSong = ''; // no song detected
   }
+}
 
   console.log('[Cleaned]', { rawArtist, rawSong });
 
